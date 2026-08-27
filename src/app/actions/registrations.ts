@@ -48,7 +48,8 @@ function validateSession(
   date: string,
   time: string,
   scheduledStartAt: Date,
-  enforceLeadWindow: boolean
+  enforceLeadWindow: boolean,
+  requireFutureSession = false
 ): string | null {
   const now = Date.now();
   const startMs = scheduledStartAt.getTime();
@@ -63,6 +64,9 @@ function validateSession(
     if (!(w.available_times ?? []).includes(time)) {
       return "Escolha um horário válido da aula.";
     }
+    if (requireFutureSession && elapsed >= 0) {
+      return "Este horário já passou. Escolha o próximo.";
+    }
     if (elapsed >= w.duration_seconds) {
       return "Esta sessão já foi encerrada. Escolha a próxima.";
     }
@@ -74,6 +78,9 @@ function validateSession(
   }
 
   if (w.type === "just_in_time") {
+    if (requireFutureSession && elapsed >= 0) {
+      return "Este horário já passou. Escolha o próximo.";
+    }
     if (elapsed >= w.duration_seconds) {
       return "Esta sessão já foi encerrada. Escolha o próximo horário.";
     }
@@ -81,6 +88,7 @@ function validateSession(
   }
 
   // Webinar único: só horário no futuro (margem de 60s pra fuso/relógio).
+  if (requireFutureSession && elapsed >= 0) return "Este horário já passou.";
   if (elapsed > 60) return "Escolha um horário no futuro.";
   return null;
 }
@@ -127,7 +135,7 @@ export async function createRegistration(
   }
 
   const scheduledStartAt = buildScheduledStartAt(date, time, webinar.timezone);
-  const err = validateSession(webinar, date, time, scheduledStartAt, false);
+  const err = validateSession(webinar, date, time, scheduledStartAt, false, true);
   if (err) return { error: err };
 
   const { data: reg, error: rErr } = await supabase

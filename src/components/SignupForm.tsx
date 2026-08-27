@@ -164,15 +164,17 @@ export function SignupForm({
   const isWeekly =
     !isJit && recurrenceEnabled && recurrenceFreq === "weekly" && (recurrenceDays?.length ?? 0) > 0;
   const useSlots = isJit || isWeekly;
-  // A lista se refaz a cada 10s: quando a sessão em andamento acaba, ela sai
-  // sozinha e a próxima assume — sem recalcular a cada tique do contador.
-  const slotsAnchor = Math.floor(now / 10_000);
+  // A lista se refaz a cada segundo. A página de captura só oferece sessões
+  // futuras: no instante em que um horário começa, ele some e o próximo passa
+  // a ser a opção selecionada.
+  const slotsAnchor = Math.floor(now / 1_000);
   const slots = useMemo<JitSlot[]>(() => {
     if (!useSlots || !slotsAnchor) return [];
-    const nowMs = slotsAnchor * 10_000;
-    return isJit
+    const nowMs = slotsAnchor * 1_000;
+    const generated = isJit
       ? jitSlots({ intervalMinutes: jitIntervalMinutes, durationSeconds, timezone, nowMs })
       : recurrenceSlots({ times: availableTimes, days: recurrenceDays, durationSeconds, timezone, nowMs });
+    return generated.filter((slot) => slot.startMs > nowMs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotsAnchor, useSlots, isJit, jitIntervalMinutes, durationSeconds, timezone]);
 
