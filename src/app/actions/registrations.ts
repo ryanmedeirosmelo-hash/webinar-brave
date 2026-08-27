@@ -89,7 +89,10 @@ export async function createRegistration(
     webinarId: formData.get("webinarId"),
     name: formData.get("name"),
     email: formData.get("email"),
-    phone: formData.get("phone"),
+    // O formulário público padrão não coleta telefone. FormData.get() devolve
+    // null para campos ausentes, enquanto o schema aceita o campo opcional como
+    // string ou undefined.
+    phone: formData.get("phone") ?? undefined,
     date: formData.get("date"),
     time: formData.get("time"),
   });
