@@ -141,6 +141,8 @@ export async function updateWebinar(formData: FormData) {
   if (has("capture_button_color")) u.capture_button_color = txt("capture_button_color") || "#16a34a";
   if (has("capture_button_text_color"))
     u.capture_button_text_color = txt("capture_button_text_color") || "#ffffff";
+  if (has("capture_image_url")) u.capture_image_url = txt("capture_image_url") || null;
+  if (has("capture_scarcity_text")) u.capture_scarcity_text = txt("capture_scarcity_text") || null;
   if (has("login_present")) {
     const keys: Array<"name" | "email" | "whatsapp"> = ["name", "email", "whatsapp"];
     u.form_fields = keys.map((k) => ({

@@ -184,3 +184,8 @@ alter table public.offers
 insert into storage.buckets (id, name, public)
 values ('webinar-images', 'webinar-images', true)
 on conflict (id) do nothing;
+
+-- ---- 0017: página de captura (imagem + faixa de escassez) ----
+alter table public.webinars
+  add column if not exists capture_image_url    text,
+  add column if not exists capture_scarcity_text text;
