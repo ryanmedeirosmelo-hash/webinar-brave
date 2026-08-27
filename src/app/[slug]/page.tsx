@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { SignupForm } from "@/components/SignupForm";
+import { CaptureLanding } from "@/components/CaptureLanding";
 import { LivePlayer } from "@/components/LivePlayer";
 import { RegisterGate } from "@/components/RegisterGate";
 import { nextSessionStart } from "@/lib/time";
@@ -122,44 +122,8 @@ export default async function WebinarLandingPage({
   }
 
   return (
-    <main className="min-h-full grid lg:grid-cols-2">
-      {/* Coluna de apresentação */}
-      <section className="flex flex-col justify-center gap-6 px-8 py-16 lg:px-16 bg-gradient-to-br from-slate-900 to-slate-950">
-        <span className="inline-flex w-fit items-center gap-2 rounded-full bg-red-500/15 px-3 py-1 text-sm font-medium text-red-300">
-          <span className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-          Aula ao vivo
-        </span>
-        <h1 className="text-4xl lg:text-5xl font-bold text-white leading-tight">
-          {displayTitle(webinar.title)}
-        </h1>
-        {webinar.description && (
-          <p className="text-lg text-slate-300 max-w-md">{webinar.description}</p>
-        )}
-        <ul className="space-y-2 text-slate-300">
-          <li>✅ Conteúdo exclusivo, ao vivo</li>
-          <li>✅ Oferta especial liberada só durante a transmissão</li>
-          <li>✅ Tire dúvidas no chat com os participantes</li>
-        </ul>
-      </section>
-
-      {/* Coluna do formulário */}
-      <section className="flex flex-col justify-center px-8 py-16 lg:px-16 bg-slate-950">
-        <div className="w-full max-w-md mx-auto">
-          <h2 className="text-2xl font-bold text-white mb-1">Garanta sua vaga</h2>
-          <p className="text-slate-400 mb-6">Escolha o melhor dia e horário pra você.</p>
-          <SignupForm
-            webinarId={webinar.id}
-            availableTimes={webinar.available_times}
-            timezone={webinar.timezone}
-            type={webinar.type}
-            jitIntervalMinutes={webinar.jit_interval_minutes}
-            durationSeconds={webinar.duration_seconds}
-            recurrenceEnabled={webinar.recurrence_enabled}
-            recurrenceFreq={webinar.recurrence_freq}
-            recurrenceDays={webinar.recurrence_days}
-          />
-        </div>
-      </section>
+    <main className="min-h-full">
+      <CaptureLanding webinar={webinar} />
     </main>
   );
 }

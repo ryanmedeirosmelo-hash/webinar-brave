@@ -47,6 +47,8 @@ export type Webinar = {
   capture_button_label: string;
   capture_button_color: string;
   capture_button_text_color: string;
+  capture_image_url: string | null;
+  capture_scarcity_text: string | null;
   form_fields: FormField[];
   // Etapa 4 — vídeo
   video_provider: string;
