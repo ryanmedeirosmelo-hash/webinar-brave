@@ -38,10 +38,10 @@ const COUNTRIES = [
   { code: "+61", flag: "🇦🇺" },
 ];
 
-const capLabel = "mb-2 block text-[11px] font-bold text-[color:var(--cap-ink)] sm:text-[15px]";
+const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px]";
 /** Sem largura: quem usa decide (o seletor de DDI é estreito, o resto ocupa tudo). */
 const capFieldBase =
-  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-[15px] text-[11px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:text-[16px]";
+  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-3 text-[12px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:py-[15px] sm:text-[16px]";
 const capInput = `w-full ${capFieldBase}`;
 
 /** "13:30" → "13h30" (formato do print). */
@@ -214,7 +214,7 @@ export function SignupForm({
   const status = slot && mounted ? slotStatus(slot, now) : null;
 
   return (
-    <form action={formAction} className="space-y-5">
+    <form action={formAction} className="space-y-3.5 sm:space-y-5">
       <input type="hidden" name="webinarId" value={webinarId} />
 
       {/* ---- Escolha da sessão ---- */}
@@ -225,17 +225,17 @@ export function SignupForm({
           <input type="hidden" name="date" value={slot?.date ?? ""} />
           <input type="hidden" name="time" value={slot?.time ?? ""} />
 
-          <div className="relative flex items-center gap-3 rounded-[12px] border-2 border-[color:var(--cap-ink)] bg-white px-4 py-3">
+          <div className="relative flex items-center gap-3 rounded-[12px] border-2 border-[color:var(--cap-ink)] bg-white px-4 py-2.5 sm:py-3">
             <span className="text-[color:var(--cap-ink)]">
               <CalendarIcon />
             </span>
             <span className="min-w-0 flex-1 leading-tight">
-              <span className="block truncate text-[12px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
+              <span className="block truncate text-[13px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
                 {slot && mounted ? slotWhen(slot, timezone, now) : "Carregando horários…"}
               </span>
               {status && (
                 <span
-                  className="mt-0.5 block text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[12px]"
+                  className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.06em] sm:text-[12px]"
                   style={{ color: status.live ? "#dc2626" : "var(--cap-live)" }}
                 >
                   {status.text}
@@ -265,7 +265,7 @@ export function SignupForm({
           </div>
 
           {mounted && slots.length === 0 && (
-            <p className="mt-2 text-[10px] text-[color:var(--cap-muted)] sm:text-[14px]">
+            <p className="mt-2 text-[11px] text-[color:var(--cap-muted)] sm:text-[14px]">
               Nenhuma sessão disponível agora.
             </p>
           )}
@@ -359,7 +359,7 @@ export function SignupForm({
                 setCountryCode(e.target.value);
                 setPhone((p) => maskPhone(p, e.target.value));
               }}
-              className={`${capFieldBase} w-[108px] shrink-0 px-3 text-[11px] sm:text-[15px]`}
+              className={`${capFieldBase} w-[108px] shrink-0 px-3 text-[12px] sm:text-[15px]`}
             >
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>
@@ -383,7 +383,7 @@ export function SignupForm({
       )}
 
       {state?.error && (
-        <p className="rounded-[10px] border border-red-300 bg-red-50 px-4 py-3 text-[11px] text-red-700 sm:text-[15px]">
+        <p className="rounded-[10px] border border-red-300 bg-red-50 px-4 py-3 text-[12px] text-red-700 sm:text-[15px]">
           {state.error}
         </p>
       )}
@@ -392,7 +392,7 @@ export function SignupForm({
         type="submit"
         disabled={pending || (useSlots && mounted && slots.length === 0)}
         style={{ background: buttonColor, color: buttonTextColor }}
-        className="w-full rounded-[10px] px-4 py-[17px] text-[12px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:text-[17px]"
+        className="w-full rounded-[10px] px-4 py-3.5 text-[13px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[17px]"
       >
         {pending ? "Confirmando…" : buttonLabel}
       </button>
