@@ -1,0 +1,154 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html,
+body {
+  background: #020617; /* slate-950 */
+  color: #e2e8f0; /* slate-200 */
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* profundidade sutil no fundo (mantém a paleta slate) */
+body {
+  background-image:
+    radial-gradient(60rem 60rem at 100% -10%, rgba(34, 211, 238, 0.06), transparent 60%),
+    radial-gradient(50rem 50rem at -10% 110%, rgba(16, 185, 129, 0.05), transparent 60%);
+  background-attachment: fixed;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.28); /* cyan-400 */
+  color: #fff;
+}
+
+/* scrollbar discreta */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #334155 transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #334155; /* slate-700 */
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #475569; /* slate-600 */
+  background-clip: padding-box;
+}
+
+/* tipografia mais firme nos títulos */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.01em;
+}
+
+/* controles nativos na cor da marca */
+input[type="radio"],
+input[type="checkbox"] {
+  accent-color: #06b6d4; /* cyan-500 */
+}
+
+/* inputs de data/hora com ícone legível no tema escuro */
+input[type="datetime-local"],
+input[type="date"],
+input[type="time"] {
+  color-scheme: dark;
+}
+
+/* ===== Tema "estúdio de TV" (páginas do lead: cadastro/sala) ===== */
+.lead-theme {
+  font-family: var(--font-dm), var(--font-geist-sans), Arial, sans-serif;
+  /* preto de estúdio levemente aquecido — casa com marcas em dourado/âmbar */
+  background-color: #080604;
+}
+.font-display {
+  font-family: var(--font-sora), var(--font-geist-sans), Arial, sans-serif;
+}
+/* painel de vidro do estúdio */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+}
+
+
+/* ===== Tema "HotWebinar" (vermelho + branco, leitura de YouTube) =====
+   Tema APROVADO das páginas do lead (cadastro, contagem, sala e encerrada).
+   Revisão local das 4 telas com dados reais: /rascunho. */
+.hw-theme {
+  --hw-red: #ff0000; /* vermelho de transmissão (YouTube) */
+  --hw-red-hover: #cc0000;
+  --hw-bg: #ffffff;
+  --hw-bg-soft: #f9f9f9;
+  --hw-surface: #ffffff;
+  --hw-chip: #f2f2f2;
+  --hw-border: #e5e5e5;
+  --hw-text: #0f0f0f;
+  --hw-muted: #606060;
+  --hw-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), 0 8px 28px -12px rgba(0, 0, 0, 0.18);
+  font-family: var(--font-roboto), var(--font-geist-sans), Arial, sans-serif;
+  background-color: var(--hw-bg);
+  color: var(--hw-text);
+}
+/* O fundo do site é escuro (admin). Nas páginas do lead o tema é claro, então a
+   página inteira acompanha — senão sobra uma faixa escura embaixo do bloco e no
+   overscroll do celular. */
+html:has(.hw-theme),
+body:has(.hw-theme) {
+  background: #ffffff;
+  background-image: none;
+}
+html:has(.hw-theme[data-mode="dark"]),
+body:has(.hw-theme[data-mode="dark"]) {
+  background: #0f0f0f;
+}
+
+/* modo escuro do YouTube — mesma marca, fundo #0f0f0f.
+   O data-mode pode vir do próprio bloco ou de um ancestral (seletor do rascunho). */
+.hw-theme[data-mode="dark"],
+[data-mode="dark"] .hw-theme {
+  --hw-bg: #0f0f0f;
+  --hw-bg-soft: #181818;
+  --hw-surface: #212121;
+  --hw-chip: #272727;
+  --hw-border: #303030;
+  --hw-text: #f1f1f1;
+  --hw-muted: #aaaaaa;
+  --hw-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
