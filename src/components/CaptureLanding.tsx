@@ -29,14 +29,14 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                 <img src={webinar.logo_url} alt="" className="mb-6 h-10 w-auto object-contain" />
               )}
 
-              <h1 className="text-[29px] font-bold leading-[1.18] tracking-[-0.01em] text-[color:var(--cap-ink)] sm:text-[34px]">
+              <h1 className="text-[20px] font-bold leading-[1.18] tracking-[-0.01em] text-[color:var(--cap-ink)] sm:text-[34px]">
                 {richText(heading)}
               </h1>
 
               {body && (
                 <div className="mt-5 space-y-3.5">
                   {paragraphs(body).map((p, i) => (
-                    <p key={i} className="text-[17px] leading-[1.62] text-[color:var(--cap-muted)]">
+                    <p key={i} className="text-[12px] leading-[1.62] text-[color:var(--cap-muted)] sm:text-[17px]">
                       {richText(p)}
                     </p>
                   ))}
@@ -81,7 +81,7 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
       {webinar.progress_bar_enabled && (
         <div className="mt-7 bg-white px-5 py-7 sm:px-10">
           <div className="mx-auto flex max-w-[1240px] flex-col items-center gap-5 sm:flex-row sm:justify-between sm:gap-10">
-            <p className="text-center text-[20px] font-bold uppercase leading-tight tracking-[-0.01em] text-[color:var(--cap-ink)] sm:text-left sm:text-[26px]">
+            <p className="text-center text-[14px] font-bold uppercase leading-tight tracking-[-0.01em] text-[color:var(--cap-ink)] sm:text-left sm:text-[26px]">
               {scarcity}
             </p>
             <div className="w-full max-w-[420px] shrink-0">
@@ -97,7 +97,7 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                   style={{ width: `${progress}%`, background: webinar.progress_bar_color }}
                 />
               </div>
-              <p className="mt-2.5 text-center text-[17px] font-bold text-[color:var(--cap-ink)]">
+              <p className="mt-2.5 text-center text-[12px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
                 {progress}% completo
               </p>
             </div>

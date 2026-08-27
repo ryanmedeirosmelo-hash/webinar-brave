@@ -38,10 +38,10 @@ const COUNTRIES = [
   { code: "+61", flag: "🇦🇺" },
 ];
 
-const capLabel = "mb-2 block text-[15px] font-bold text-[color:var(--cap-ink)]";
+const capLabel = "mb-2 block text-[11px] font-bold text-[color:var(--cap-ink)] sm:text-[15px]";
 /** Sem largura: quem usa decide (o seletor de DDI é estreito, o resto ocupa tudo). */
 const capFieldBase =
-  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-[15px] text-[16px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)]";
+  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-[15px] text-[11px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:text-[16px]";
 const capInput = `w-full ${capFieldBase}`;
 
 /** "13:30" → "13h30" (formato do print). */
@@ -230,12 +230,12 @@ export function SignupForm({
               <CalendarIcon />
             </span>
             <span className="min-w-0 flex-1 leading-tight">
-              <span className="block truncate text-[17px] font-bold text-[color:var(--cap-ink)]">
+              <span className="block truncate text-[12px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
                 {slot && mounted ? slotWhen(slot, timezone, now) : "Carregando horários…"}
               </span>
               {status && (
                 <span
-                  className="mt-0.5 block text-[12px] font-bold uppercase tracking-[0.06em]"
+                  className="mt-0.5 block text-[9px] font-bold uppercase tracking-[0.06em] sm:text-[12px]"
                   style={{ color: status.live ? "#dc2626" : "var(--cap-live)" }}
                 >
                   {status.text}
@@ -265,7 +265,7 @@ export function SignupForm({
           </div>
 
           {mounted && slots.length === 0 && (
-            <p className="mt-2 text-[14px] text-[color:var(--cap-muted)]">
+            <p className="mt-2 text-[10px] text-[color:var(--cap-muted)] sm:text-[14px]">
               Nenhuma sessão disponível agora.
             </p>
           )}
@@ -359,7 +359,7 @@ export function SignupForm({
                 setCountryCode(e.target.value);
                 setPhone((p) => maskPhone(p, e.target.value));
               }}
-              className={`${capFieldBase} w-[108px] shrink-0 px-3 text-[15px]`}
+              className={`${capFieldBase} w-[108px] shrink-0 px-3 text-[11px] sm:text-[15px]`}
             >
               {COUNTRIES.map((c) => (
                 <option key={c.code} value={c.code}>
@@ -383,7 +383,7 @@ export function SignupForm({
       )}
 
       {state?.error && (
-        <p className="rounded-[10px] border border-red-300 bg-red-50 px-4 py-3 text-[15px] text-red-700">
+        <p className="rounded-[10px] border border-red-300 bg-red-50 px-4 py-3 text-[11px] text-red-700 sm:text-[15px]">
           {state.error}
         </p>
       )}
@@ -392,7 +392,7 @@ export function SignupForm({
         type="submit"
         disabled={pending || (useSlots && mounted && slots.length === 0)}
         style={{ background: buttonColor, color: buttonTextColor }}
-        className="w-full rounded-[10px] px-4 py-[17px] text-[17px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-[10px] px-4 py-[17px] text-[12px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:text-[17px]"
       >
         {pending ? "Confirmando…" : buttonLabel}
       </button>
