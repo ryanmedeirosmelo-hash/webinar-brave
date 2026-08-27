@@ -164,7 +164,6 @@ export function SignupForm({
   const isWeekly =
     !isJit && recurrenceEnabled && recurrenceFreq === "weekly" && (recurrenceDays?.length ?? 0) > 0;
   const useSlots = isJit || isWeekly;
-
   // A lista se refaz a cada 10s: quando a sessão em andamento acaba, ela sai
   // sozinha e a próxima assume — sem recalcular a cada tique do contador.
   const slotsAnchor = Math.floor(now / 10_000);

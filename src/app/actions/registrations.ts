@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrationSchema } from "@/lib/schemas";
 import { buildScheduledStartAt, isoWeekday, REGISTRATION_LEAD_MS } from "@/lib/time";
+import type { FormField } from "@/types/db";
 
 export type RegistrationState = { error?: string } | undefined;
 
@@ -17,10 +18,17 @@ type WebinarRow = {
   recurrence_freq: string;
   recurrence_days: number[] | null;
   available_times: string[] | null;
+  form_fields: FormField[] | null;
 };
 
 const WEBINAR_COLS =
-  "id, timezone, status, type, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times";
+  "id, timezone, status, type, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields";
+
+function whatsappIsRequired(w: WebinarRow) {
+  return w.form_fields?.some(
+    (field) => field.key === "whatsapp" && field.enabled && field.required
+  );
+}
 
 function isWeekly(w: WebinarRow): boolean {
   return (
@@ -112,6 +120,10 @@ export async function createRegistration(
 
   if (wErr || !webinar || webinar.status !== "active") {
     return { error: "Webinar indisponível." };
+  }
+
+  if (whatsappIsRequired(webinar) && (phone ?? "").replace(/\D/g, "").length < 8) {
+    return { error: "Informe seu WhatsApp válido com DDD." };
   }
 
   const scheduledStartAt = buildScheduledStartAt(date, time, webinar.timezone);
