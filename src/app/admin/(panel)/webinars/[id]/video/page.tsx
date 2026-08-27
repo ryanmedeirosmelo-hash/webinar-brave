@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { updateWebinar } from "@/app/admin/actions";
 import { formatDuration } from "@/lib/time";
 import { VideoUploader } from "@/components/VideoUploader";
+import { VideoPreview } from "@/components/VideoPreview";
+import { resolveVideoSource } from "@/lib/video-source";
 import { input, label, card, saveBtn } from "../_steps";
 import { Toggle } from "../_fields";
 import type { Webinar } from "@/types/db";
@@ -24,7 +26,7 @@ export default async function StepVideo({
     .single<Webinar>();
   if (!w) notFound();
 
-  const src = w.video_path ? `/v/${w.id}` : w.video_external_url || w.video_url;
+  const source = resolveVideoSource(w);
 
   return (
     <div className="grid lg:grid-cols-[1fr_420px] gap-6 items-start">
@@ -59,6 +61,12 @@ export default async function StepVideo({
           <div className="mt-3">
             <label className={label}>Link do vídeo (m3u8 / URL do provedor)</label>
             <input name="video_external_url" defaultValue={w.video_external_url ?? ""} placeholder="https://…/playlist.m3u8" className={input} />
+            <p className="mt-1 text-xs text-slate-500">
+              A aula controla o vídeo (trava o tempo, bloqueia pause/avanço), então precisa de um
+              MP4 ou de uma playlist <code>.m3u8</code> — o link de embed/iframe do provedor é uma
+              página HTML e não toca. No Bunny, use{" "}
+              <code>https://SEU-CDN.b-cdn.net/&lt;id-do-video&gt;/playlist.m3u8</code>.
+            </p>
           </div>
           <div className="mt-3">
             <label className={label}>Duração do vídeo (hh:mm:ss)</label>
@@ -88,15 +96,7 @@ export default async function StepVideo({
       {/* Prévia */}
       <aside className="lg:sticky lg:top-4">
         <p className="text-xs text-slate-500 mb-2">Prévia</p>
-        <div className="rounded-xl overflow-hidden bg-black aspect-video">
-          {src ? (
-            <video src={src} controls className="h-full w-full object-contain" />
-          ) : (
-            <div className="h-full grid place-items-center text-slate-600 text-sm">
-              Envie um vídeo para ver a prévia
-            </div>
-          )}
-        </div>
+        <VideoPreview src={source.url} problem={source.problem} />
       </aside>
     </div>
   );

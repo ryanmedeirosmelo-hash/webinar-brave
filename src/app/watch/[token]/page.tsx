@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { LivePlayer } from "@/components/LivePlayer";
 import { displayTitle } from "@/components/Brand";
+import { resolveVideoUrl } from "@/lib/video-source";
 import type { Webinar, Registration, ChatMessage, Offer, SalesNotification } from "@/types/db";
 
 export default async function WatchPage({
@@ -50,11 +51,7 @@ export default async function WatchPage({
 
   if (!webinar) notFound();
 
-  const videoUrl = webinar.video_path
-    ? `/v/${webinar.id}`
-    : webinar.video_provider !== "upload" && webinar.video_external_url
-      ? webinar.video_external_url
-      : webinar.video_url;
+  const videoUrl = resolveVideoUrl(webinar);
 
   return (
     <main className="min-h-full">

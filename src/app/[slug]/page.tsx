@@ -5,6 +5,7 @@ import { LivePlayer } from "@/components/LivePlayer";
 import { RegisterGate } from "@/components/RegisterGate";
 import { nextSessionStart } from "@/lib/time";
 import { displayTitle } from "@/components/Brand";
+import { resolveVideoUrl } from "@/lib/video-source";
 import type { Webinar, ChatMessage, Offer, SalesNotification } from "@/types/db";
 
 // Sala de espera = contagem regressiva: precisa renderizar a cada acesso
@@ -40,14 +41,6 @@ async function fetchRoomChildren(
     offers: (offers ?? []) as Offer[],
     sales: (sales ?? []) as SalesNotification[],
   };
-}
-
-function resolveVideoUrl(webinar: Webinar): string {
-  return webinar.video_path
-    ? `/v/${webinar.id}`
-    : webinar.video_provider !== "upload" && webinar.video_external_url
-      ? webinar.video_external_url
-      : webinar.video_url;
 }
 
 export default async function WebinarLandingPage({
