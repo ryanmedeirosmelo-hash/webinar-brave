@@ -64,7 +64,7 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
 
             {/* ---- Imagem ---- */}
             {image && (
-              <div className="order-first overflow-hidden rounded-[18px] lg:order-none">
+              <div className="overflow-hidden rounded-[18px]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={image}
