@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { RascunhoReal } from "./_RascunhoReal";
+import { resolveVideoUrl } from "@/lib/video-source";
 import type { Webinar, ChatMessage, Offer, SalesNotification } from "@/types/db";
 
 export const dynamic = "force-dynamic";
@@ -36,11 +37,7 @@ export default async function RascunhoPage({
     supabase.from("sales_notifications").select("*").eq("webinar_id", webinar.id).order("at_seconds"),
   ]);
 
-  const videoUrl = webinar.video_path
-    ? `/v/${webinar.id}`
-    : webinar.video_provider !== "upload" && webinar.video_external_url
-      ? webinar.video_external_url
-      : webinar.video_url;
+  const videoUrl = resolveVideoUrl(webinar);
 
   return (
     <RascunhoReal
