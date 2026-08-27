@@ -30,6 +30,12 @@ function numOrNull(v: FormDataEntryValue | null) {
   return Number.isFinite(n) ? n : null;
 }
 
+function omit<T extends object, K extends keyof T>(value: T, keys: readonly K[]): Omit<T, K> {
+  return Object.fromEntries(
+    Object.entries(value).filter(([key]) => !keys.includes(key as K))
+  ) as Omit<T, K>;
+}
+
 /** Converte "hh:mm:ss", "mm:ss" ou só segundos em total de segundos. */
 function parseDuration(v: FormDataEntryValue | null): number | null {
   const s = String(v ?? "").trim();
@@ -209,7 +215,7 @@ export async function duplicateWebinar(formData: FormData) {
     slug = `${base}-${i}`;
   }
 
-  const { id: _id, created_at: _c, slug: _s, title: _t, ...rest } = w;
+  const rest = omit(w, ["id", "created_at", "slug", "title"] as const);
   const { data: copy } = await supabase
     .from("webinars")
     .insert({ ...rest, slug, title: `${w.title} (cópia)`, status: "draft" })
@@ -221,7 +227,7 @@ export async function duplicateWebinar(formData: FormData) {
     for (const table of ["chat_messages", "offers", "sales_notifications"]) {
       const { data: rows } = await supabase.from(table).select("*").eq("webinar_id", id);
       if (rows?.length) {
-        const cloned = rows.map(({ id: _ri, ...r }) => ({ ...r, webinar_id: copy.id }));
+        const cloned = rows.map((row) => ({ ...omit(row, ["id"] as const), webinar_id: copy.id }));
         await supabase.from(table).insert(cloned);
       }
     }

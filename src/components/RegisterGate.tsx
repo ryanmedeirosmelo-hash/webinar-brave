@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { LivePlayer } from "./LivePlayer";
 import { displayTitle } from "./Brand";
 import {
@@ -41,6 +41,49 @@ type Props = {
   sales: SalesNotification[];
 };
 
+let clockNow = 0;
+
+function subscribeToClock(onStoreChange: () => void) {
+  const tick = () => {
+    clockNow = Date.now();
+    onStoreChange();
+  };
+
+  tick();
+  const id = window.setInterval(tick, 1000);
+  return () => window.clearInterval(id);
+}
+
+function getClockSnapshot() {
+  return clockNow;
+}
+
+function getServerClockSnapshot() {
+  return 0;
+}
+
+function subscribeToHydration() {
+  return () => {};
+}
+
+function getClientSnapshot() {
+  return true;
+}
+
+function getServerHydrationSnapshot() {
+  return false;
+}
+
+function readSavedValue<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const value = localStorage.getItem(key);
+    return value ? (JSON.parse(value) as T) : null;
+  } catch {
+    return null;
+  }
+}
+
 function fmtWhen(ms: number, tz: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
@@ -54,35 +97,25 @@ function fmtWhen(ms: number, tz: string): string {
 
 export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draftView }: Props) {
   // Evita mismatch de hidratação: só calcula horários após montar no cliente.
-  const [mounted, setMounted] = useState(false);
-  const [now, setNow] = useState(0);
-
-  const [person, setPerson] = useState<SavedPerson | null>(null);
-  const [session, setSession] = useState<SavedSession | null>(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const mounted = useSyncExternalStore(
+    subscribeToHydration,
+    getClientSnapshot,
+    getServerHydrationSnapshot
+  );
+  const now = useSyncExternalStore(subscribeToClock, getClockSnapshot, getServerClockSnapshot);
 
   const cacheKey = `aw_reg:${webinar.id}`;
   const sessionKey = `aw_reg_session:${webinar.id}`;
-  const tz = webinar.timezone;
+  const [person, setPerson] = useState<SavedPerson | null>(() =>
+    draftView ? null : readSavedValue<SavedPerson>(cacheKey)
+  );
+  const [session, setSession] = useState<SavedSession | null>(() =>
+    draftView ? null : readSavedValue<SavedSession>(sessionKey)
+  );
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setNow(Date.now());
-    setMounted(true);
-    try {
-      if (!draftView) {
-        const p = localStorage.getItem(cacheKey);
-        if (p) setPerson(JSON.parse(p) as SavedPerson);
-        const s = localStorage.getItem(sessionKey);
-        if (s) setSession(JSON.parse(s) as SavedSession);
-      }
-    } catch {
-      /* sem storage: segue como visitante novo */
-    }
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [webinar.id]);
+  const tz = webinar.timezone;
 
   // Próxima sessão recalculada a cada tique (rola sozinha quando a aula acaba).
   const startMs = mounted ? nextSessionStart(webinar, now).getTime() : 0;

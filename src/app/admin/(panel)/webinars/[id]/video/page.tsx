@@ -90,7 +90,6 @@ export default async function StepVideo({
         <p className="text-xs text-slate-500 mb-2">Prévia</p>
         <div className="rounded-xl overflow-hidden bg-black aspect-video">
           {src ? (
-            // eslint-disable-next-line jsx-a11y/media-has-caption
             <video src={src} controls className="h-full w-full object-contain" />
           ) : (
             <div className="h-full grid place-items-center text-slate-600 text-sm">

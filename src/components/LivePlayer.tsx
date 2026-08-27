@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { elapsedSeconds, postLiveOfferOpen, POST_LIVE_OFFER_UNTIL } from "@/lib/time";
 import { recordHeartbeat, recordAnonHeartbeat } from "@/app/actions/heartbeat";
 import { SimulatedChat } from "./SimulatedChat";
@@ -84,6 +84,41 @@ function fakeViewers(elapsed: number, duration: number, cfg: AudienceConfig) {
   return Math.max(cfg.min, Math.round(value));
 }
 
+function getUnlockedSnapshot() {
+  return false;
+}
+
+function useReplayLock(
+  webinarId: string | null | undefined,
+  scheduledStartAtIso: string,
+  disabled: boolean | undefined
+) {
+  const getSnapshot = useCallback(() => {
+    if (disabled || !webinarId || typeof window === "undefined") return false;
+    try {
+      const seen = localStorage.getItem(`aw_seen:${webinarId}`);
+      return !!seen && seen !== scheduledStartAtIso;
+    } catch {
+      return false;
+    }
+  }, [disabled, webinarId, scheduledStartAtIso]);
+
+  const subscribe = useCallback(
+    (onStoreChange: () => void) => {
+      if (!webinarId || typeof window === "undefined") return () => {};
+      const key = `aw_seen:${webinarId}`;
+      const onStorage = (event: StorageEvent) => {
+        if (event.key === key) onStoreChange();
+      };
+      window.addEventListener("storage", onStorage);
+      return () => window.removeEventListener("storage", onStorage);
+    },
+    [webinarId]
+  );
+
+  return useSyncExternalStore(subscribe, getSnapshot, getUnlockedSnapshot);
+}
+
 export function LivePlayer({
   title,
   presenterName,
@@ -120,7 +155,11 @@ export function LivePlayer({
   const [muted, setMuted] = useState(true);
   // Trava de reapresentação: quem já assistiu uma live que ENCERROU não pode
   // rever o vídeo (nem em outra sessão). Marcado por navegador (localStorage).
-  const [locked, setLocked] = useState(false);
+  const locked = useReplayLock(
+    webinarId,
+    scheduledStartAtIso,
+    previewMode || draftMode || disableReplayLock
+  );
 
   // Relógio mestre: 1x por segundo recalcula elapsed e a fase.
   useEffect(() => {
@@ -196,22 +235,6 @@ export function LivePlayer({
     draftMode,
     disableReplayLock,
   ]);
-
-  // Trava de reapresentação. Chave por webinar+navegador guarda a 1ª live que o
-  // espectador assistiu. Se a sessão atual é OUTRA (a anterior já encerrou), ele
-  // fica bloqueado — não reassiste. Mesma sessão em andamento = pode retomar.
-  useEffect(() => {
-    if (previewMode || draftMode || disableReplayLock || !webinarId) {
-      setLocked(false);
-      return;
-    }
-    try {
-      const seen = localStorage.getItem(`aw_seen:${webinarId}`);
-      setLocked(!!seen && seen !== scheduledStartAtIso);
-    } catch {
-      setLocked(false);
-    }
-  }, [webinarId, scheduledStartAtIso, previewMode, draftMode, disableReplayLock]);
 
   // Registra a live assistida assim que entra ao vivo (não sobrescreve uma
   // sessão anterior já gravada → mantém o bloqueio nas próximas).
