@@ -18,15 +18,15 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
   const progress = Math.min(100, Math.max(0, webinar.progress_start ?? 0));
 
   return (
-    <div className="cap-theme min-h-full py-3 sm:py-10">
+    <div className="cap-theme min-h-full py-3 sm:py-10 lg:py-8">
       <div className="mx-auto w-full max-w-[1240px] px-3 sm:px-5">
-        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] sm:px-10 sm:py-12 lg:px-14">
-          <div className="grid items-center gap-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] lg:gap-14">
+        <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] sm:px-10 sm:py-12 lg:px-12 lg:py-9">
+          <div className="grid items-center gap-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] lg:gap-10">
             {/* ---- Texto + formulário ---- */}
             <div className="min-w-0">
               {webinar.logo_url && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={webinar.logo_url} alt="" className="mb-4 h-10 w-auto object-contain sm:mb-6" />
+                <img src={webinar.logo_url} alt="" className="mb-4 h-10 w-auto object-contain sm:mb-6 lg:mb-4" />
               )}
 
               <h1 className="text-[22px] font-bold leading-[1.18] tracking-[-0.01em] text-[color:var(--cap-ink)] sm:text-[34px]">
@@ -34,16 +34,16 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
               </h1>
 
               {body && (
-                <div className="mt-3 space-y-2 sm:mt-5 sm:space-y-3.5">
+                <div className="mt-3 space-y-2 sm:mt-5 sm:space-y-3.5 lg:mt-4 lg:space-y-2.5">
                   {paragraphs(body).map((p, i) => (
-                    <p key={i} className="text-[13px] leading-[1.5] text-[color:var(--cap-muted)] sm:text-[17px] sm:leading-[1.62]">
+                    <p key={i} className="text-[13px] leading-[1.5] text-[color:var(--cap-muted)] sm:text-[17px] sm:leading-[1.62] lg:leading-[1.5]">
                       {richText(p)}
                     </p>
                   ))}
                 </div>
               )}
 
-              <div className="mt-5 sm:mt-7">
+              <div className="mt-5 sm:mt-7 lg:mt-5">
                 <SignupForm
                   webinarId={webinar.id}
                   availableTimes={webinar.available_times}
@@ -69,7 +69,7 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                 <img
                   src={image}
                   alt=""
-                  className="h-full max-h-[300px] w-full object-cover sm:max-h-[400px] lg:max-h-[560px]"
+                  className="h-full max-h-[300px] w-full object-cover sm:max-h-[400px] lg:max-h-[500px]"
                 />
               </div>
             )}
@@ -79,8 +79,8 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
 
       {/* ---- Faixa de escassez ---- */}
       {webinar.progress_bar_enabled && (
-        <div className="mt-7 bg-white px-5 py-7 sm:px-10">
-          <div className="mx-auto flex max-w-[1240px] flex-col items-center gap-5 sm:flex-row sm:justify-between sm:gap-10">
+        <div className="mt-7 bg-white px-5 py-7 sm:px-10 lg:mt-5 lg:py-5">
+          <div className="mx-auto flex max-w-[1240px] flex-col items-center gap-5 sm:flex-row sm:justify-between sm:gap-10 lg:gap-8">
             <p className="text-center text-[15px] font-bold uppercase leading-tight tracking-[-0.01em] text-[color:var(--cap-ink)] sm:text-left sm:text-[26px]">
               {scarcity}
             </p>

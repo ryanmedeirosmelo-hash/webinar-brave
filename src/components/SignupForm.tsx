@@ -38,10 +38,10 @@ const COUNTRIES = [
   { code: "+61", flag: "🇦🇺" },
 ];
 
-const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px]";
+const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px] lg:mb-1.5";
 /** Sem largura: quem usa decide (o seletor de DDI é estreito, o resto ocupa tudo). */
 const capFieldBase =
-  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-3 text-[12px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:py-[15px] sm:text-[16px]";
+  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-3 text-[12px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:py-[15px] sm:text-[16px] lg:py-3.5";
 const capInput = `w-full ${capFieldBase}`;
 
 /** "13:30" → "13h30" (formato do print). */
@@ -214,7 +214,7 @@ export function SignupForm({
   const status = slot && mounted ? slotStatus(slot, now) : null;
 
   return (
-    <form action={formAction} className="space-y-3.5 sm:space-y-5">
+    <form action={formAction} className="space-y-3.5 sm:space-y-5 lg:space-y-4">
       <input type="hidden" name="webinarId" value={webinarId} />
 
       {/* ---- Escolha da sessão ---- */}
@@ -225,7 +225,7 @@ export function SignupForm({
           <input type="hidden" name="date" value={slot?.date ?? ""} />
           <input type="hidden" name="time" value={slot?.time ?? ""} />
 
-          <div className="relative flex items-center gap-3 rounded-[12px] border-2 border-[color:var(--cap-ink)] bg-white px-4 py-2.5 sm:py-3">
+          <div className="relative flex items-center gap-3 rounded-[12px] border-2 border-[color:var(--cap-ink)] bg-white px-4 py-2.5 sm:py-3 lg:py-2.5">
             <span className="text-[color:var(--cap-ink)]">
               <CalendarIcon />
             </span>
@@ -392,7 +392,7 @@ export function SignupForm({
         type="submit"
         disabled={pending || (useSlots && mounted && slots.length === 0)}
         style={{ background: buttonColor, color: buttonTextColor }}
-        className="w-full rounded-[10px] px-4 py-3.5 text-[13px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[17px]"
+        className="w-full rounded-[10px] px-4 py-3.5 text-[13px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[17px] lg:py-4"
       >
         {pending ? "Confirmando…" : buttonLabel}
       </button>
