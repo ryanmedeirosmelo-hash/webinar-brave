@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import { elapsedSeconds, postLiveOfferOpen, POST_LIVE_OFFER_UNTIL } from "@/lib/time";
 import { recordHeartbeat, recordAnonHeartbeat } from "@/app/actions/heartbeat";
 import { SimulatedChat } from "./SimulatedChat";
@@ -51,11 +51,6 @@ type Props = {
   /** Modo admin/teste: libera controles nativos (velocidade, seek) e desliga
    *  a sincronia por relógio. Acionado por ?preview=1 no link. */
   previewMode?: boolean;
-  /** Desliga a trava de replay permanente por navegador (aw_seen). Usado no
-   *  fluxo recorrente (aula-seg/aula-qui), onde a mesma pessoa volta toda semana:
-   *  a tela de "aula encerrada" no fim continua valendo, mas não trava a próxima
-   *  sessão. O replay segue impossível (vídeo travado no relógio). */
-  disableReplayLock?: boolean;
   /** Revisão local: sem heartbeat, trava de replay ou tracking de oferta. */
   draftMode?: boolean;
 };
@@ -84,41 +79,6 @@ function fakeViewers(elapsed: number, duration: number, cfg: AudienceConfig) {
   return Math.max(cfg.min, Math.round(value));
 }
 
-function getUnlockedSnapshot() {
-  return false;
-}
-
-function useReplayLock(
-  webinarId: string | null | undefined,
-  scheduledStartAtIso: string,
-  disabled: boolean | undefined
-) {
-  const getSnapshot = useCallback(() => {
-    if (disabled || !webinarId || typeof window === "undefined") return false;
-    try {
-      const seen = localStorage.getItem(`aw_seen:${webinarId}`);
-      return !!seen && seen !== scheduledStartAtIso;
-    } catch {
-      return false;
-    }
-  }, [disabled, webinarId, scheduledStartAtIso]);
-
-  const subscribe = useCallback(
-    (onStoreChange: () => void) => {
-      if (!webinarId || typeof window === "undefined") return () => {};
-      const key = `aw_seen:${webinarId}`;
-      const onStorage = (event: StorageEvent) => {
-        if (event.key === key) onStoreChange();
-      };
-      window.addEventListener("storage", onStorage);
-      return () => window.removeEventListener("storage", onStorage);
-    },
-    [webinarId]
-  );
-
-  return useSyncExternalStore(subscribe, getSnapshot, getUnlockedSnapshot);
-}
-
 export function LivePlayer({
   title,
   presenterName,
@@ -141,7 +101,6 @@ export function LivePlayer({
   webinarId,
   viewerName,
   previewMode,
-  disableReplayLock,
   draftMode,
 }: Props) {
   void autoplay; // o simulated-live sempre força play; mantido p/ futuras opções
@@ -153,14 +112,6 @@ export function LivePlayer({
   // No preview forçamos "live" para o admin ver o player independente do horário.
   const phase: Phase = previewMode ? "live" : phaseState;
   const [muted, setMuted] = useState(true);
-  // Trava de reapresentação: quem já assistiu uma live que ENCERROU não pode
-  // rever o vídeo (nem em outra sessão). Marcado por navegador (localStorage).
-  const locked = useReplayLock(
-    webinarId,
-    scheduledStartAtIso,
-    previewMode || draftMode || disableReplayLock
-  );
-
   // Relógio mestre: 1x por segundo recalcula elapsed e a fase.
   useEffect(() => {
     const tick = () => {
@@ -184,19 +135,6 @@ export function LivePlayer({
     if (previewMode || draftMode) return;
     if (!registrationToken && !webinarId) return;
 
-    // Lê a trava direto do storage (o estado `locked` só chega no efeito
-    // seguinte — a 1ª batida não pode escapar antes disso).
-    const lockedNow = () => {
-      if (disableReplayLock || !webinarId) return false;
-      try {
-        const seen = localStorage.getItem(`aw_seen:${webinarId}`);
-        return !!seen && seen !== scheduledStartAtIso;
-      } catch {
-        return false;
-      }
-    };
-    if (lockedNow()) return;
-
     // Anônimo: id estável por navegador (persiste no localStorage).
     let anonId: string | null = null;
     if (!registrationToken) {
@@ -215,7 +153,6 @@ export function LivePlayer({
       const e = elapsedSeconds(scheduledStartAtIso);
       if (e < 0) return; // fase "antes": ainda não entrou na live
       if (durationSeconds > 0 && e >= durationSeconds) return; // aula encerrada
-      if (lockedNow()) return;
       const pos = Math.min(Math.floor(e), durationSeconds);
       if (registrationToken) {
         recordHeartbeat(registrationToken, pos, scheduledStartAtIso).catch(() => {});
@@ -233,21 +170,7 @@ export function LivePlayer({
     durationSeconds,
     previewMode,
     draftMode,
-    disableReplayLock,
   ]);
-
-  // Registra a live assistida assim que entra ao vivo (não sobrescreve uma
-  // sessão anterior já gravada → mantém o bloqueio nas próximas).
-  useEffect(() => {
-    if (previewMode || draftMode || disableReplayLock || !webinarId) return;
-    if (phase !== "live" && phase !== "ended") return;
-    try {
-      const key = `aw_seen:${webinarId}`;
-      if (!localStorage.getItem(key)) localStorage.setItem(key, scheduledStartAtIso);
-    } catch {
-      /* sem storage: não trava */
-    }
-  }, [phase, webinarId, scheduledStartAtIso, previewMode, draftMode, disableReplayLock]);
 
   // Define a fonte do vídeo. Para HLS (.m3u8) preferimos SEMPRE o hls.js (MSE):
   // o HLS "nativo" do Chrome é instável (engasga e falha o áudio). Só usamos o
@@ -372,17 +295,14 @@ export function LivePlayer({
     </HwPage>
   );
 
-  // ---------- ENCERRADO (fim da live OU já assistiu: não reapresenta) ----------
-  // `locked` = este navegador já assistiu uma live que terminou → sem replay,
-  // mesmo que já exista uma próxima sessão agendada (seg/qui). Checado ANTES da
-  // contagem regressiva, senão um espectador travado veria o countdown da próxima.
-  // A oferta sobrevive ao fim da transmissão até POST_LIVE_OFFER_UNTIL: quem
-  // estava decidindo comprar quando a sala fechou não fica sem o checkout.
-  // (`locked` = live de outro dia → sem oferta, a condição daquele dia já passou.)
+  // ---------- ENCERRADO ----------
+  // A inscrição fixa o início da própria sessão; por isso a fase "ended" já
+  // impede replay daquele link. Uma trava global no navegador bloquearia a
+  // próxima turma Just in Time, que é exatamente o fluxo esperado aqui.
+  // A oferta sobrevive ao fim da transmissão até POST_LIVE_OFFER_UNTIL.
   const offerAfterEnd =
     draftMode ||
     (phase === "ended" &&
-    !locked &&
     !!timezone &&
     postLiveOfferOpen(
       new Date(scheduledStartAtIso).getTime(),
@@ -414,7 +334,7 @@ export function LivePlayer({
       support={<SupportBox />}
     />
   );
-  if ((locked || phase === "ended") && !previewMode) return endedScreen;
+  if (phase === "ended" && !previewMode) return endedScreen;
 
   // ---------- FASE: ANTES (contagem regressiva) ----------
   if (phase === "before") {

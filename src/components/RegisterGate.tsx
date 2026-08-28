@@ -324,7 +324,6 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         salesTitle={webinar.sales_notification_title}
         autoplay={webinar.video_autoplay}
         fullscreen={webinar.video_fullscreen}
-        disableReplayLock
         audience={{
           enabled: webinar.audience_enabled,
           mode: webinar.audience_mode,
