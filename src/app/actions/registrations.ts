@@ -5,7 +5,13 @@ import { redirect } from "next/navigation";
 import { notifyLeadWebhook, type LeadSource } from "@/lib/lead-webhook";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrationSchema } from "@/lib/schemas";
-import { buildScheduledStartAt, isoWeekday, REGISTRATION_LEAD_MS } from "@/lib/time";
+import {
+  buildScheduledStartAt,
+  isoWeekday,
+  jitSlots,
+  recurrenceSlots,
+  REGISTRATION_LEAD_MS,
+} from "@/lib/time";
 import type { FormField } from "@/types/db";
 
 export type RegistrationState = { error?: string } | undefined;
@@ -15,6 +21,7 @@ type WebinarRow = {
   timezone: string;
   status: string;
   type: string;
+  jit_interval_minutes: number;
   duration_seconds: number;
   recurrence_enabled: boolean;
   recurrence_freq: string;
@@ -25,7 +32,7 @@ type WebinarRow = {
 };
 
 const WEBINAR_COLS =
-  "id, timezone, status, type, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields, integrations";
+  "id, timezone, status, type, jit_interval_minutes, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields, integrations";
 
 function sourceText(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 2_000) : "";
@@ -119,6 +126,28 @@ function validateSession(
   }
 
   if (w.type === "just_in_time") {
+    // O formulário público do JIT oferece somente o próximo intervalo e os
+    // horários fixos configurados (neste webinar, 20:00). Repete a regra no
+    // servidor para impedir que uma requisição manual cadastre outro horário.
+    const nextJitSlot = jitSlots({
+      intervalMinutes: Math.max(1, Math.floor(w.jit_interval_minutes || 15)),
+      durationSeconds: w.duration_seconds,
+      timezone: w.timezone,
+      nowMs: now,
+      upcoming: 1,
+    }).find((slot) => slot.startMs > now);
+    const nextFixedSlot = recurrenceSlots({
+      times: w.available_times ?? [],
+      days: [1, 2, 3, 4, 5, 6, 7],
+      durationSeconds: w.duration_seconds,
+      timezone: w.timezone,
+      nowMs: now,
+      upcoming: 1,
+    }).find((slot) => slot.startMs > now);
+    const isFixedSession = startMs === nextFixedSlot?.startMs;
+    if (startMs !== nextJitSlot?.startMs && !isFixedSession) {
+      return "Escolha o próximo horário disponível ou a sessão das 20h.";
+    }
     if (requireFutureSession && elapsed >= 0) {
       return "Este horário já passou. Escolha o próximo.";
     }

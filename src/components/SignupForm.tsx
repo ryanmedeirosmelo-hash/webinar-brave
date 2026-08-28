@@ -183,9 +183,27 @@ export function SignupForm({
     if (!useSlots || !slotsAnchor) return [];
     const nowMs = slotsAnchor * 1_000;
     const generated = isJit
-      ? jitSlots({ intervalMinutes: jitIntervalMinutes, durationSeconds, timezone, nowMs })
+      ? [
+          // No JIT, exibimos só o próximo intervalo — não uma sequência de
+          // horários. Os horários configurados no painel (20:00 neste caso)
+          // entram como sessões fixas adicionais.
+          ...jitSlots({ intervalMinutes: jitIntervalMinutes, durationSeconds, timezone, nowMs, upcoming: 1 }),
+          ...recurrenceSlots({
+            times: availableTimes,
+            days: [1, 2, 3, 4, 5, 6, 7],
+            durationSeconds,
+            timezone,
+            nowMs,
+            upcoming: 1,
+          }),
+        ]
       : recurrenceSlots({ times: availableTimes, days: recurrenceDays, durationSeconds, timezone, nowMs });
-    return generated.filter((slot) => slot.startMs > nowMs);
+
+    // A mesma sessão pode coincidir com o intervalo (ex.: 20:00). Remove a
+    // duplicata e mantém a lista cronológica.
+    return [...new Map(generated.filter((s) => s.startMs > nowMs).map((s) => [s.startMs, s])).values()].sort(
+      (a, b) => a.startMs - b.startMs
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotsAnchor, useSlots, isJit, jitIntervalMinutes, durationSeconds, timezone]);
 
