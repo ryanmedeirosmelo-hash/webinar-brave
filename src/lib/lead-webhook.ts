@@ -14,6 +14,7 @@ type LeadRegistration = {
   phone: string | null;
   scheduledStartAt: string;
   createdAt: string;
+  sessionUrl: string;
 };
 
 export type LeadSource = {
@@ -109,6 +110,7 @@ export function buildLeadWebhookPayload(
     turma: turma(startMs, webinar),
     fuso: webinar.timezone,
     inscrito_em: new Date(registration.createdAt).toISOString(),
+    link_sessao: registration.sessionUrl,
   };
 }
 

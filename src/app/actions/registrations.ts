@@ -31,6 +31,27 @@ function sourceText(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 2_000) : "";
 }
 
+function forwardedValue(value: string | null) {
+  return value?.split(",")[0]?.trim() ?? "";
+}
+
+async function sessionUrl(accessToken: string) {
+  const requestHeaders = await headers();
+  const host =
+    forwardedValue(requestHeaders.get("x-forwarded-host")) ||
+    forwardedValue(requestHeaders.get("host"));
+  const requestedProtocol = forwardedValue(requestHeaders.get("x-forwarded-proto"));
+  const protocol = requestedProtocol === "http" ? "http" : "https";
+
+  try {
+    return new URL(`/watch/${accessToken}`, `${protocol}://${host}`).toString();
+  } catch {
+    // Só ocorre em ambientes sem host HTTP válido. A inscrição permanece
+    // íntegra e o webhook recebe um valor vazio em vez de um link incorreto.
+    return "";
+  }
+}
+
 async function leadSource(input: LeadSource): Promise<LeadSource> {
   const requestHeaders = await headers();
   return {
@@ -180,6 +201,8 @@ export async function createRegistration(
     return { error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
 
+  const registeredSessionUrl = await sessionUrl(reg.access_token);
+
   await notifyLeadWebhook(
     webinar,
     {
@@ -188,6 +211,7 @@ export async function createRegistration(
       phone: phone || null,
       scheduledStartAt: scheduledStartAt.toISOString(),
       createdAt: reg.created_at,
+      sessionUrl: registeredSessionUrl,
     },
     source
   );
@@ -276,6 +300,8 @@ export async function registerForSession(input: {
     return { ok: false, error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
 
+  const registeredSessionUrl = await sessionUrl(reg.access_token);
+
   await notifyLeadWebhook(
     webinar,
     {
@@ -284,6 +310,7 @@ export async function registerForSession(input: {
       phone,
       scheduledStartAt: iso,
       createdAt: reg.created_at,
+      sessionUrl: registeredSessionUrl,
     },
     source
   );
