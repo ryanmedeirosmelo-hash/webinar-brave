@@ -1,6 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { notifyLeadWebhook, type LeadSource } from "@/lib/lead-webhook";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrationSchema } from "@/lib/schemas";
 import { buildScheduledStartAt, isoWeekday, REGISTRATION_LEAD_MS } from "@/lib/time";
@@ -19,10 +21,28 @@ type WebinarRow = {
   recurrence_days: number[] | null;
   available_times: string[] | null;
   form_fields: FormField[] | null;
+  integrations: Record<string, unknown> | null;
 };
 
 const WEBINAR_COLS =
-  "id, timezone, status, type, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields";
+  "id, timezone, status, type, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields, integrations";
+
+function sourceText(value: unknown) {
+  return typeof value === "string" ? value.trim().slice(0, 2_000) : "";
+}
+
+async function leadSource(input: LeadSource): Promise<LeadSource> {
+  const requestHeaders = await headers();
+  return {
+    origin:
+      sourceText(input.origin) ||
+      requestHeaders.get("referer") ||
+      requestHeaders.get("origin") ||
+      "",
+    referrer: sourceText(input.referrer),
+    userAgent: sourceText(input.userAgent) || requestHeaders.get("user-agent") || "",
+  };
+}
 
 function whatsappIsRequired(w: WebinarRow) {
   return w.form_fields?.some(
@@ -118,6 +138,11 @@ export async function createRegistration(
   }
 
   const { webinarId, name, email, phone, date, time } = parsed.data;
+  const source = await leadSource({
+    origin: formData.get("origin")?.toString(),
+    referrer: formData.get("referrer")?.toString(),
+    userAgent: formData.get("user_agent")?.toString(),
+  });
   const supabase = supabaseAdmin();
 
   const { data: webinar, error: wErr } = await supabase
@@ -148,12 +173,24 @@ export async function createRegistration(
       scheduled_start_at: scheduledStartAt.toISOString(),
       timezone: webinar.timezone,
     })
-    .select("access_token")
+    .select("access_token, created_at")
     .single();
 
   if (rErr || !reg) {
     return { error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
+
+  await notifyLeadWebhook(
+    webinar,
+    {
+      name,
+      email,
+      phone: phone || null,
+      scheduledStartAt: scheduledStartAt.toISOString(),
+      createdAt: reg.created_at,
+    },
+    source
+  );
 
   redirect(`/watch/${reg.access_token}`);
 }
@@ -176,6 +213,9 @@ export async function registerForSession(input: {
   phone: string;
   date: string;
   time: string;
+  origin?: string;
+  referrer?: string;
+  userAgent?: string;
 }): Promise<RegisterResult> {
   const parsed = registrationSchema.safeParse(input);
   if (!parsed.success) {
@@ -187,6 +227,7 @@ export async function registerForSession(input: {
   }
 
   const { webinarId, name, email, date, time } = parsed.data;
+  const source = await leadSource(input);
   const supabase = supabaseAdmin();
 
   const { data: webinar, error: wErr } = await supabase
@@ -228,12 +269,24 @@ export async function registerForSession(input: {
       scheduled_start_at: iso,
       timezone: webinar.timezone,
     })
-    .select("access_token")
+    .select("access_token, created_at")
     .single();
 
   if (rErr || !reg) {
     return { ok: false, error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
+
+  await notifyLeadWebhook(
+    webinar,
+    {
+      name,
+      email,
+      phone,
+      scheduledStartAt: iso,
+      createdAt: reg.created_at,
+    },
+    source
+  );
 
   return { ok: true, token: reg.access_token, scheduledStartAtIso: iso };
 }

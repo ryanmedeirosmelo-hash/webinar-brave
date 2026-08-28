@@ -134,6 +134,17 @@ function ChevronIcon() {
   );
 }
 
+function includeLeadSource(form: HTMLFormElement) {
+  const set = (name: string, value: string) => {
+    const input = form.querySelector<HTMLInputElement>(`input[name="${name}"]`);
+    if (input) input.value = value;
+  };
+
+  set("origin", window.location.href);
+  set("referrer", document.referrer);
+  set("user_agent", navigator.userAgent);
+}
+
 export function SignupForm({
   webinarId,
   availableTimes,
@@ -214,8 +225,15 @@ export function SignupForm({
   const status = slot && mounted ? slotStatus(slot, now) : null;
 
   return (
-    <form action={formAction} className="space-y-3.5 sm:space-y-5 lg:space-y-4">
+    <form
+      action={formAction}
+      className="space-y-3.5 sm:space-y-5 lg:space-y-4"
+      onSubmit={(event) => includeLeadSource(event.currentTarget)}
+    >
       <input type="hidden" name="webinarId" value={webinarId} />
+      <input type="hidden" name="origin" defaultValue="" />
+      <input type="hidden" name="referrer" defaultValue="" />
+      <input type="hidden" name="user_agent" defaultValue="" />
 
       {/* ---- Escolha da sessão ---- */}
       {useSlots ? (

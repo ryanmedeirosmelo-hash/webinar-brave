@@ -84,6 +84,14 @@ function readSavedValue<T>(key: string): T | null {
   }
 }
 
+function browserLeadSource() {
+  return {
+    origin: window.location.href,
+    referrer: document.referrer,
+    userAgent: navigator.userAgent,
+  };
+}
+
 function fmtWhen(ms: number, tz: string): string {
   return new Intl.DateTimeFormat("pt-BR", {
     weekday: "long",
@@ -151,6 +159,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
       phone: person.phone,
       date,
       time,
+      ...browserLeadSource(),
     })
       .then((r) => {
         if (cancelled || !r.ok) return;
@@ -182,7 +191,15 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
 
     setPending(true);
     const { date, time } = zonedParts(startMs, tz);
-    const r = await registerForSession({ webinarId: webinar.id, name, email, phone, date, time });
+    const r = await registerForSession({
+      webinarId: webinar.id,
+      name,
+      email,
+      phone,
+      date,
+      time,
+      ...browserLeadSource(),
+    });
     setPending(false);
     if (!r.ok) return setError(r.error);
 
