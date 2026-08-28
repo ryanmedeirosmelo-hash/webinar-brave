@@ -353,7 +353,6 @@ export function LivePlayer({
   // Breve "conectando" no início: evita o vídeo estourar seco após a contagem.
   // O vídeo já carrega por trás e é revelado quando o overlay sai.
   const connecting = !previewMode && elapsed < CONNECTING_SECONDS;
-  const progresso = durationSeconds > 0 ? Math.min(100, (elapsed / durationSeconds) * 100) : 0;
   const minutos = Math.max(0, Math.floor(elapsed / 60));
 
   return shell(
@@ -440,10 +439,6 @@ export function LivePlayer({
             </button>
           )}
 
-          {/* barra de progresso "ao vivo" (sem seek) */}
-          <div className="absolute inset-x-0 bottom-0 z-30 h-1 bg-white/25">
-            <div className="h-full bg-[var(--hw-red)]" style={{ width: `${progresso}%` }} />
-          </div>
         </div>
 
         <div className="flex flex-wrap items-start justify-between gap-3">
