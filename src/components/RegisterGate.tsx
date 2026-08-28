@@ -26,6 +26,7 @@ import {
 } from "@/lib/time";
 import type { Webinar, ChatMessage, Offer, SalesNotification } from "@/types/db";
 import { FREE_ENTRY_DATES, FREE_ENTRY_SLUGS, PRE_COUNTDOWN_SLUGS } from "@/lib/brand";
+import { supportWhatsAppNumber } from "@/lib/whatsapp";
 
 type SavedPerson = { name: string; email: string; phone: string };
 type SavedSession = { iso: string; token: string };
@@ -124,6 +125,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   const [error, setError] = useState<string | null>(null);
 
   const tz = webinar.timezone;
+  const supportWhatsapp = supportWhatsAppNumber(webinar.integrations);
 
   // Próxima sessão recalculada a cada tique (rola sozinha quando a aula acaba).
   const startMs = mounted ? nextSessionStart(webinar, now).getTime() : 0;
@@ -260,7 +262,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
             />
           ) : null
         }
-        support={<SupportBox />}
+        support={<SupportBox whatsapp={supportWhatsapp} />}
       />
     );
   }
@@ -297,6 +299,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         autoplay={webinar.video_autoplay}
         fullscreen={webinar.video_fullscreen}
         draftMode
+        supportWhatsapp={supportWhatsapp}
         audience={{ enabled: webinar.audience_enabled, mode: webinar.audience_mode, min: webinar.audience_min, max: webinar.audience_max }}
       />
     );
@@ -314,6 +317,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         webinarId={webinar.id}
         registrationToken={token}
         viewerName={person?.name ?? null}
+        supportWhatsapp={supportWhatsapp}
         videoUrl={videoUrl}
         durationSeconds={webinar.duration_seconds}
         scheduledStartAtIso={startIso}

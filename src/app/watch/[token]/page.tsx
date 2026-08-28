@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { LivePlayer } from "@/components/LivePlayer";
 import { displayTitle } from "@/components/Brand";
 import { resolveVideoUrl } from "@/lib/video-source";
+import { supportWhatsAppNumber } from "@/lib/whatsapp";
 import type { Webinar, Registration, ChatMessage, Offer, SalesNotification } from "@/types/db";
 
 export default async function WatchPage({
@@ -80,6 +81,7 @@ export default async function WatchPage({
         registrationToken={token}
         webinarId={webinar.id}
         viewerName={registration.name}
+        supportWhatsapp={supportWhatsAppNumber(webinar.integrations)}
         previewMode={previewMode}
       />
     </main>

@@ -6,6 +6,7 @@ import { RegisterGate } from "@/components/RegisterGate";
 import { nextSessionStart } from "@/lib/time";
 import { displayTitle } from "@/components/Brand";
 import { resolveVideoUrl } from "@/lib/video-source";
+import { supportWhatsAppNumber } from "@/lib/whatsapp";
 import type { Webinar, ChatMessage, Offer, SalesNotification } from "@/types/db";
 
 // Sala de espera = contagem regressiva: precisa renderizar a cada acesso
@@ -100,6 +101,7 @@ export default async function WebinarLandingPage({
           logoUrl={webinar.logo_url}
           accentColor={webinar.capture_button_color}
           webinarId={webinar.id}
+          supportWhatsapp={supportWhatsAppNumber(webinar.integrations)}
           videoUrl={resolveVideoUrl(webinar)}
           durationSeconds={webinar.duration_seconds}
           scheduledStartAtIso={scheduledStartAtIso}

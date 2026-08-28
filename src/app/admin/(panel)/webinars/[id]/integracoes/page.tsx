@@ -7,9 +7,16 @@ import type { Webinar } from "@/types/db";
 
 export const dynamic = "force-dynamic";
 
-const INTEGRATIONS: { key: string; name: string; mono: string; tint: string; placeholder: string }[] = [
+const INTEGRATIONS: { key: string; name: string; mono: string; tint: string; placeholder: string; hint?: string }[] = [
   { key: "active_campaign", name: "Active Campaign", mono: "AC", tint: "text-sky-300 bg-sky-400/10", placeholder: "API URL / token" },
-  { key: "whatsapp", name: "WhatsApp", mono: "WA", tint: "text-emerald-300 bg-emerald-400/10", placeholder: "Número / API" },
+  {
+    key: "whatsapp",
+    name: "WhatsApp de suporte",
+    mono: "WA",
+    tint: "text-emerald-300 bg-emerald-400/10",
+    placeholder: "Ex.: (11) 99999-9999",
+    hint: "Exibe o botão de suporte no fim da aula. Números do Brasil recebem o DDI +55 automaticamente.",
+  },
   { key: "keap", name: "Keap", mono: "Kp", tint: "text-orange-300 bg-orange-400/10", placeholder: "Token" },
   { key: "sellflux", name: "SellFlux", mono: "SF", tint: "text-slate-300 bg-slate-400/10", placeholder: "Webhook / token" },
   { key: "kommo", name: "Kommo", mono: "Km", tint: "text-violet-300 bg-violet-400/10", placeholder: "Token" },
@@ -61,13 +68,18 @@ export default async function StepIntegracoes({
                 </span>
                 <span className={`h-2 w-2 rounded-full ${cfg.enabled ? "bg-emerald-400" : "bg-slate-600"}`} />
               </div>
-              <Toggle name={`int_${it.key}_enabled`} defaultChecked={!!cfg.enabled} label="Ativar" />
+              <Toggle
+                name={`int_${it.key}_enabled`}
+                defaultChecked={!!cfg.enabled}
+                label={it.key === "whatsapp" ? "Exibir botão" : "Ativar"}
+              />
               <input
                 name={`int_${it.key}_value`}
                 defaultValue={cfg.value ?? ""}
                 placeholder={it.placeholder}
                 className={`${input} text-xs`}
               />
+              {it.hint && <p className="text-[11px] leading-snug text-slate-500">{it.hint}</p>}
             </div>
           );
         })}

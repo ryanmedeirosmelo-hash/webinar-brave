@@ -1,17 +1,15 @@
 "use client";
 
-/** WhatsApp da equipe de suporte (formato internacional, só dígitos). */
-const SUPPORT_WHATSAPP = "5511963167650";
-
-const SUPPORT_MESSAGE = "Olá! Acabei de assistir a aula ao vivo e preciso de ajuda.";
+import { supportWhatsAppHref } from "@/lib/whatsapp";
 
 /**
  * Bloco de suporte exibido só na tela final (aula encerrada), junto da oferta.
  * Durante a live ele não aparece — sair pro WhatsApp tirava o espectador da aula.
- * Não depende de dados do webinar — é o mesmo canal de atendimento pra todos.
+ * O número vem da integração WhatsApp do webinar, configurada pelo painel.
  */
-export function SupportBox() {
-  const href = `https://wa.me/${SUPPORT_WHATSAPP}?text=${encodeURIComponent(SUPPORT_MESSAGE)}`;
+export function SupportBox({ whatsapp }: { whatsapp?: string | null }) {
+  const href = supportWhatsAppHref(whatsapp);
+  if (!href) return null;
 
   return (
     <div className="rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-bg-soft)] px-5 py-4 text-center">

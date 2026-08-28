@@ -48,6 +48,8 @@ type Props = {
   webinarId?: string | null;
   /** Nome do inscrito — usado quando ele comenta no chat. */
   viewerName?: string | null;
+  /** WhatsApp da equipe, configurado na integração deste webinar. */
+  supportWhatsapp?: string | null;
   /** Modo admin/teste: libera controles nativos (velocidade, seek) e desliga
    *  a sincronia por relógio. Acionado por ?preview=1 no link. */
   previewMode?: boolean;
@@ -100,6 +102,7 @@ export function LivePlayer({
   registrationToken,
   webinarId,
   viewerName,
+  supportWhatsapp,
   previewMode,
   draftMode,
 }: Props) {
@@ -331,7 +334,7 @@ export function LivePlayer({
       }
       /* Suporte só no fim, junto do botão de compra — durante a live o WhatsApp
          tirava o espectador da transmissão. */
-      support={<SupportBox />}
+      support={<SupportBox whatsapp={supportWhatsapp} />}
     />
   );
   if (phase === "ended" && !previewMode) return endedScreen;
