@@ -285,7 +285,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
   const totals = statsOf(filtered, "Geral", weekday);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex flex-col gap-4">
       {/* Filtros: período + dia da semana + webinar */}
       <div className="flex flex-wrap items-center gap-2">
         {PERIODS.map((p) => (
@@ -512,13 +512,13 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-5 lg:grid-cols-[300px_1fr]">
-      {/* Lista de lives realizadas — scroll próprio, altura total */}
-      <aside className="flex min-h-0 flex-col gap-2">
+      <div className="grid gap-5 lg:grid-cols-[300px_1fr]">
+      {/* Lista de lives realizadas */}
+      <aside className="flex flex-col gap-2">
         <p className="px-1 text-[10px] font-semibold uppercase tracking-widest text-slate-600">
           Lives no período ({filtered.length})
         </p>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1 max-h-[40vh] lg:max-h-none">
+        <div className="space-y-2 pr-1">
           {filtered.length === 0 && (
             <p className="px-1 text-sm text-slate-500">Nenhuma live neste período.</p>
           )}
@@ -574,8 +574,8 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
         </div>
       </aside>
 
-      {/* Detalhe da live selecionada — scroll independente da lista */}
-      <section className="min-h-0 overflow-y-auto pr-1 pb-2 lg:pb-4">
+      {/* Detalhe da live selecionada */}
+      <section className="min-w-0 pr-1 pb-2 lg:pb-4">
         {detail && selected === keyOf(detail) ? (
           <LiveDetailView d={detail} tab={tab} onTab={setTab} />
         ) : selected ? (
