@@ -73,6 +73,13 @@ const dayPartsFmt = new Intl.DateTimeFormat("en-US", {
   month: "2-digit",
   day: "2-digit",
 });
+const dayLabelFmt = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: BRT,
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
 const hmFmt = new Intl.DateTimeFormat("pt-BR", {
   timeZone: BRT,
   hour: "2-digit",
@@ -94,6 +101,11 @@ function dayOf(iso: string): string {
       .map((part) => [part.type, part.value])
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function dayLabel(day: string): string {
+  // Meio-dia UTC permanece no mesmo dia em Brasília; evita virar o dia anterior.
+  return dayLabelFmt.format(new Date(`${day}T12:00:00.000Z`)).replace(".", "");
 }
 
 /** Minuto do dia (0–1439) de um instante, em Brasília. */
@@ -272,6 +284,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
 
   const filtered = filterLives(lives, period, webinarFilter, weekday, sessionDate);
   const webinars = [...new Map(lives.map((l) => [l.webinarId, l])).values()];
+  const sessionDates = [...new Set(lives.map((l) => dayOf(l.sessionStart)))].sort().reverse();
 
   // troca de filtro: garante que a live selecionada continua visível
   const applyFilter = (p: Period, wf: string, wd: WeekdayFilter, date: string) => {
@@ -352,26 +365,21 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           >
             data
           </label>
-          <input
+          <select
             id="metrics-session-date"
-            type="date"
             value={sessionDate}
             onChange={(e) =>
               applyFilter(e.target.value ? "all" : period, webinarFilter, weekday, e.target.value)
             }
             className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-300 outline-none focus:border-[#cbad78]/60"
-          />
-          {sessionDate && (
-            <button
-              type="button"
-              onClick={() => applyFilter(period, webinarFilter, weekday, "")}
-              className="rounded-md px-1.5 py-1 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-200"
-              aria-label="Limpar filtro de data"
-              title="Limpar filtro de data"
-            >
-              ×
-            </button>
-          )}
+          >
+            <option value="">Todas as datas</option>
+            {sessionDates.map((date) => (
+              <option key={date} value={date}>
+                {dayLabel(date)}
+              </option>
+            ))}
+          </select>
         </div>
 
         <select
