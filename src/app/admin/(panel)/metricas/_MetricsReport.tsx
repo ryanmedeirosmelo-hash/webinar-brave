@@ -67,6 +67,12 @@ const WD_INDEX: Record<string, number> = {
   Sat: 6,
 };
 const wdFmt = new Intl.DateTimeFormat("en-US", { timeZone: BRT, weekday: "short" });
+const dayPartsFmt = new Intl.DateTimeFormat("en-US", {
+  timeZone: BRT,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 const hmFmt = new Intl.DateTimeFormat("pt-BR", {
   timeZone: BRT,
   hour: "2-digit",
@@ -77,6 +83,17 @@ const hmFmt = new Intl.DateTimeFormat("pt-BR", {
 /** Dia da semana (0=dom) da live, em Brasília. */
 function weekdayOf(iso: string): number {
   return WD_INDEX[wdFmt.format(new Date(iso))] ?? 0;
+}
+
+/** Dia civil da live em Brasília, no formato aceito pelo campo de data. */
+function dayOf(iso: string): string {
+  const parts = Object.fromEntries(
+    dayPartsFmt
+      .formatToParts(new Date(iso))
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 /** Minuto do dia (0–1439) de um instante, em Brasília. */
@@ -117,7 +134,8 @@ function filterLives(
   lives: LiveRow[],
   period: Period,
   webinarId: string,
-  weekday: WeekdayFilter
+  weekday: WeekdayFilter,
+  sessionDate: string
 ): LiveRow[] {
   const cutoff =
     period === "all" ? 0 : Date.now() - Number(period) * 24 * 60 * 60 * 1000;
@@ -125,7 +143,8 @@ function filterLives(
     (l) =>
       (webinarId === "all" || l.webinarId === webinarId) &&
       (cutoff === 0 || new Date(l.sessionStart).getTime() >= cutoff) &&
-      (weekday === "all" || weekdayOf(l.sessionStart) === weekday)
+      (weekday === "all" || weekdayOf(l.sessionStart) === weekday) &&
+      (!sessionDate || dayOf(l.sessionStart) === sessionDate)
   );
 }
 
@@ -203,6 +222,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
   const [period, setPeriod] = useState<Period>("30");
   const [webinarFilter, setWebinarFilter] = useState<string>("all");
   const [weekday, setWeekday] = useState<WeekdayFilter>("all");
+  const [sessionDate, setSessionDate] = useState("");
   const [selected, setSelected] = useState<string | null>(
     initialLives.length ? keyOf(initialLives[0]) : null
   );
@@ -250,23 +270,24 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
     );
   }
 
-  const filtered = filterLives(lives, period, webinarFilter, weekday);
+  const filtered = filterLives(lives, period, webinarFilter, weekday, sessionDate);
   const webinars = [...new Map(lives.map((l) => [l.webinarId, l])).values()];
 
   // troca de filtro: garante que a live selecionada continua visível
-  const applyFilter = (p: Period, wf: string, wd: WeekdayFilter) => {
+  const applyFilter = (p: Period, wf: string, wd: WeekdayFilter, date: string) => {
     setPeriod(p);
     setWebinarFilter(wf);
     setWeekday(wd);
-    const f = filterLives(lives, p, wf, wd);
+    setSessionDate(date);
+    const f = filterLives(lives, p, wf, wd, date);
     if (!f.some((l) => keyOf(l) === selected)) {
       setSelected(f.length ? keyOf(f[0]) : null);
     }
   };
 
-  // Comparativo por dia da semana — ignora o filtro de dia (senão só sobra 1 linha),
-  // mas respeita período e webinar.
-  const byWeekdayBase = filterLives(lives, period, webinarFilter, "all");
+  // Comparativo por dia da semana — ignora só o filtro de dia da semana (senão só sobra
+  // uma linha), mas respeita período, webinar e a data específica escolhida.
+  const byWeekdayBase = filterLives(lives, period, webinarFilter, "all", sessionDate);
   const weekdaysPresent = [...new Set(byWeekdayBase.map((l) => weekdayOf(l.sessionStart)))].sort(
     (a, b) => a - b
   );
@@ -286,12 +307,12 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filtros: período + dia da semana + webinar */}
+      {/* Filtros: período + data + dia da semana + webinar */}
       <div className="flex flex-wrap items-center gap-2">
         {PERIODS.map((p) => (
           <button
             key={p.key}
-            onClick={() => applyFilter(p.key, webinarFilter, weekday)}
+            onClick={() => applyFilter(p.key, webinarFilter, weekday, "")}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
               period === p.key
                 ? "bg-[#cbad78]/15 text-[#e3cfa0] ring-1 ring-[#cbad78]/40"
@@ -311,7 +332,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
             {(["all", ...weekdaysPresent] as WeekdayFilter[]).map((wd) => (
               <button
                 key={String(wd)}
-                onClick={() => applyFilter(period, webinarFilter, wd)}
+                onClick={() => applyFilter(period, webinarFilter, wd, sessionDate)}
                 className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                   weekday === wd
                     ? "bg-[#cbad78]/15 text-[#e3cfa0] ring-1 ring-[#cbad78]/40"
@@ -324,9 +345,38 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           </div>
         )}
 
+        <div className="flex items-center gap-1.5 border-l border-slate-800 pl-2">
+          <label
+            htmlFor="metrics-session-date"
+            className="text-[10px] font-semibold uppercase tracking-widest text-slate-600"
+          >
+            data
+          </label>
+          <input
+            id="metrics-session-date"
+            type="date"
+            value={sessionDate}
+            onChange={(e) =>
+              applyFilter(e.target.value ? "all" : period, webinarFilter, weekday, e.target.value)
+            }
+            className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-300 outline-none focus:border-[#cbad78]/60"
+          />
+          {sessionDate && (
+            <button
+              type="button"
+              onClick={() => applyFilter(period, webinarFilter, weekday, "")}
+              className="rounded-md px-1.5 py-1 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-200"
+              aria-label="Limpar filtro de data"
+              title="Limpar filtro de data"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
         <select
           value={webinarFilter}
-          onChange={(e) => applyFilter(period, e.target.value, weekday)}
+          onChange={(e) => applyFilter(period, e.target.value, weekday, sessionDate)}
           className="ml-auto rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 outline-none focus:border-[#cbad78]/60"
         >
           <option value="all">Todos os webinars</option>
