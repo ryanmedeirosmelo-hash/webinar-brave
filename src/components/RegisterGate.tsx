@@ -261,6 +261,10 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
     } catch {
       /* ignore */
     }
+
+    // A confirmação também passa pela página final individual do webinar. O
+    // token é mantido somente para o CTA abrir a sala certa desta inscrição.
+    window.location.assign(`/obrigado/${webinar.slug}?acesso=${encodeURIComponent(s.token)}`);
   }
 
   const brandName = webinar.presenter_name || displayTitle(webinar.title);

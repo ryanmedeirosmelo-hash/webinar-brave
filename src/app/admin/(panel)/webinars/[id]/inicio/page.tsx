@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { updateWebinar } from "@/app/admin/actions";
+import { PublicLinkActions } from "@/components/PublicLinkActions";
 import { input, label, card, saveBtn } from "../_steps";
 import type { Webinar } from "@/types/db";
 
@@ -70,6 +71,20 @@ export default async function StepInicio({
           <p className="mt-1 text-xs text-slate-500">
             Página pública: <span className="text-slate-400">/{w.slug}</span>
           </p>
+        </div>
+
+        <div className="rounded-xl border border-[#cbad78]/30 bg-[#cbad78]/[0.07] p-4">
+          <p className="text-sm font-semibold text-[#e4c88f]">Página final / de agradecimento</p>
+          <p className="mt-1 text-xs leading-5 text-slate-400">
+            Este link é criado automaticamente para este webinar. A página usa o título, a marca,
+            a apresentação e o suporte configurados aqui.
+          </p>
+          <code className="mt-3 block w-fit rounded bg-slate-950/60 px-2 py-1 text-xs text-slate-300">
+            /obrigado/{w.slug}
+          </code>
+          <div className="mt-3">
+            <PublicLinkActions path={`/obrigado/${w.slug}`} />
+          </div>
         </div>
 
         <div className="grid sm:grid-cols-2 gap-5">

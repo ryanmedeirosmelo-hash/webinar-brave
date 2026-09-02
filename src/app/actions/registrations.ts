@@ -18,6 +18,7 @@ export type RegistrationState = { error?: string } | undefined;
 
 type WebinarRow = {
   id: string;
+  slug: string;
   timezone: string;
   status: string;
   type: string;
@@ -32,7 +33,7 @@ type WebinarRow = {
 };
 
 const WEBINAR_COLS =
-  "id, timezone, status, type, jit_interval_minutes, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields, integrations";
+  "id, slug, timezone, status, type, jit_interval_minutes, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields, integrations";
 
 function sourceText(value: unknown) {
   return typeof value === "string" ? value.trim().slice(0, 2_000) : "";
@@ -245,7 +246,10 @@ export async function createRegistration(
     source
   );
 
-  redirect(`/watch/${reg.access_token}`);
+  // A página final é própria de cada webinar. O token segue na URL apenas para
+  // o CTA devolver a pessoa à sua sala individual, sem trocar o acesso por uma
+  // página pública genérica.
+  redirect(`/obrigado/${webinar.slug}?acesso=${encodeURIComponent(reg.access_token)}`);
 }
 
 export type RegisterResult =
