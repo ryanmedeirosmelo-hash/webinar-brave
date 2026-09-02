@@ -118,6 +118,7 @@ export default async function WebinarLandingPage({
             min: webinar.audience_min,
             max: webinar.audience_max,
           }}
+          resumeProgressEnabled={webinar.resume_progress_enabled}
         />
       </main>
     );

@@ -165,6 +165,7 @@ export async function updateWebinar(formData: FormData) {
   if (has("video_present")) {
     u.video_autoplay = f.get("video_autoplay") === "on";
     u.video_fullscreen = f.get("video_fullscreen") === "on";
+    u.resume_progress_enabled = f.get("resume_progress_enabled") === "on";
   }
 
   // Etapa 7 — título da notificação de venda

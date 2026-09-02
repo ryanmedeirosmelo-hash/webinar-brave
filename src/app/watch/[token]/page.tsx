@@ -85,8 +85,11 @@ export default async function WatchPage({
           max: webinar.audience_max,
         }}
         registrationToken={token}
-        initialResumeSeconds={Math.max(0, watchSession?.last_position_seconds ?? 0)}
-        hasStarted={!!watchSession}
+        initialResumeSeconds={
+          webinar.resume_progress_enabled ? Math.max(0, watchSession?.last_position_seconds ?? 0) : 0
+        }
+        hasStarted={webinar.resume_progress_enabled && !!watchSession}
+        resumeProgressEnabled={webinar.resume_progress_enabled}
         webinarId={webinar.id}
         viewerName={registration.name}
         supportWhatsapp={supportWhatsAppNumber(webinar.integrations)}

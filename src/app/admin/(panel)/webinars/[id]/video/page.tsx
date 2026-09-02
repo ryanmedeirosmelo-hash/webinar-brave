@@ -86,6 +86,12 @@ export default async function StepVideo({
         <div className="border-t border-slate-800 pt-5 space-y-3">
           <Toggle name="video_autoplay" defaultChecked={w.video_autoplay} label="Definir como auto play" />
           <Toggle name="video_fullscreen" defaultChecked={w.video_fullscreen} label="Habilitar fullscreen" />
+          <Toggle
+            name="resume_progress_enabled"
+            defaultChecked={w.resume_progress_enabled}
+            label="Permitir continuidade individual da aula"
+            hint="Cada pessoa volta do ponto em que parou, mesmo depois do término da turma. Desligado, todos acompanham a mesma cronologia da live."
+          />
         </div>
 
         <div className="flex justify-end">

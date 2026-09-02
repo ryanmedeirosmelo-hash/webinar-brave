@@ -14,6 +14,7 @@ import {
   hwInput,
 } from "./HwKit";
 import { registerForSession } from "@/app/actions/registrations";
+import { getRecordedPlaybackPosition } from "@/app/actions/heartbeat";
 import { SupportBox } from "./SupportBox";
 import { TimedOffer } from "./TimedOffer";
 import {
@@ -132,11 +133,35 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   const [session, setSession] = useState<SavedSession | null>(() =>
     draftView ? null : readSavedValue<SavedSession>(sessionKey)
   );
+  const [hasRecordedProgress, setHasRecordedProgress] = useState(() =>
+    !draftView && !!session && savedPlaybackPosition(session.token) > 0
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const tz = webinar.timezone;
   const supportWhatsapp = supportWhatsAppNumber(webinar.integrations);
+
+  // O navegador responde de imediato. Em outro aparelho, confirmamos o ponto
+  // remoto antes de liberar a continuidade após o encerramento da turma.
+  useEffect(() => {
+    if (draftView || !webinar.resume_progress_enabled || !session) {
+      setHasRecordedProgress(false);
+      return;
+    }
+
+    const localPosition = savedPlaybackPosition(session.token);
+    setHasRecordedProgress(localPosition > 0);
+    let cancelled = false;
+    getRecordedPlaybackPosition(session.token)
+      .then((position) => {
+        if (!cancelled && position > 0) setHasRecordedProgress(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [draftView, session?.token, webinar.resume_progress_enabled]);
 
   // Próxima sessão recalculada a cada tique (rola sozinha quando a aula acaba).
   const startMs = mounted ? nextSessionStart(webinar, now).getTime() : 0;
@@ -157,15 +182,16 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   // a sala fecha. A oferta da live que acabou continua na tela até as 22:00.
   const endedToday = mounted ? lastEndedSessionToday(webinar, now) : null;
   const offerAfterEnd = !!endedToday && postLiveOfferOpen(endedToday.getTime(), tz, now);
-  // Quem entrou na turma e já acumulou progresso pode voltar mesmo depois do
-  // fim do horário global. A pessoa retoma o próprio ponto; quem nunca abriu a
-  // aula continua vendo a próxima turma, sem transformar o link em replay.
+  // Quando o webinar libera continuidade, quem entrou na turma e já acumulou
+  // progresso pode voltar mesmo depois do fim do horário global. Quem nunca
+  // abriu a aula continua vendo a próxima turma, sem transformar o link em replay.
   const resumeEndedSession =
     !draftView &&
+    webinar.resume_progress_enabled &&
     !!endedToday &&
     !!session &&
     session.iso === endedToday.toISOString() &&
-    savedPlaybackPosition(session.token) > 0;
+    (hasRecordedProgress || savedPlaybackPosition(session.token) > 0);
 
   // Cadastrado (cache): garante uma inscrição pra sessão de hoje quando a janela
   // abre — assim a presença/identidade é registrada toda semana sem repreencher.
@@ -267,6 +293,9 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         logoUrl={webinar.logo_url}
         webinarId={webinar.id}
         registrationToken={session.token}
+        initialResumeSeconds={savedPlaybackPosition(session.token)}
+        hasStarted
+        resumeProgressEnabled={webinar.resume_progress_enabled}
         viewerName={person?.name ?? null}
         supportWhatsapp={supportWhatsapp}
         videoUrl={videoUrl}
@@ -351,6 +380,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         autoplay={webinar.video_autoplay}
         fullscreen={webinar.video_fullscreen}
         draftMode
+        resumeProgressEnabled={webinar.resume_progress_enabled}
         supportWhatsapp={supportWhatsapp}
         audience={{ enabled: webinar.audience_enabled, mode: webinar.audience_mode, min: webinar.audience_min, max: webinar.audience_max }}
       />
@@ -368,6 +398,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         logoUrl={webinar.logo_url}
         webinarId={webinar.id}
         registrationToken={token}
+        resumeProgressEnabled={webinar.resume_progress_enabled}
         viewerName={person?.name ?? null}
         supportWhatsapp={supportWhatsapp}
         videoUrl={videoUrl}

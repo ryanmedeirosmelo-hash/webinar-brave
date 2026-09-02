@@ -51,6 +51,8 @@ type Props = {
   initialResumeSeconds?: number;
   /** Há registro de que este link já iniciou esta sessão. */
   hasStarted?: boolean;
+  /** Libera a continuidade individual configurada neste webinar. */
+  resumeProgressEnabled?: boolean;
   /** Id do webinar — usado p/ contar quem assiste anônimo (link público sem
    *  inscrição). Sem registrationToken, o heartbeat cai pro modo anônimo. */
   webinarId?: string | null;
@@ -115,6 +117,7 @@ export function LivePlayer({
   registrationToken,
   initialResumeSeconds = 0,
   hasStarted = false,
+  resumeProgressEnabled = false,
   webinarId,
   viewerName,
   supportWhatsapp,
@@ -124,11 +127,17 @@ export function LivePlayer({
   void autoplay; // o simulated-live sempre força play; mantido p/ futuras opções
   const videoRef = useRef<HTMLVideoElement>(null);
   const initialScheduledElapsed = elapsedSeconds(scheduledStartAtIso);
-  // Em modo normal, o relógio só libera a entrada na sala. Depois disso,
-  // vídeo, chat e ofertas seguem o ponto individual da pessoa — nunca o
-  // horário global da turma. O draft preserva a simulação temporal do painel.
+  // Com continuidade ligada, o relógio só libera a entrada na sala. Depois
+  // disso vídeo, chat e ofertas seguem o ponto individual. Desligada, o
+  // webinar permanece sincronizado pela cronologia global da transmissão.
   const firstPosition = clampPosition(
-    draftMode ? initialScheduledElapsed : previewMode ? 0 : initialResumeSeconds,
+    draftMode
+      ? initialScheduledElapsed
+      : previewMode
+        ? 0
+        : resumeProgressEnabled
+          ? initialResumeSeconds
+          : initialScheduledElapsed,
     durationSeconds
   );
   const playbackPositionRef = useRef(firstPosition);
@@ -139,6 +148,7 @@ export function LivePlayer({
   const [phaseState, setPhase] = useState<Phase>(() => {
     if (previewMode) return "live";
     if (draftMode) return phaseFor(initialScheduledElapsed, durationSeconds);
+    if (!resumeProgressEnabled) return phaseFor(initialScheduledElapsed, durationSeconds);
     if (firstPosition >= durationSeconds && durationSeconds > 0) return "ended";
     // Não transforma um link nunca usado em replay após o encerramento global.
     if (initialScheduledElapsed >= durationSeconds && !hasStarted) return "ended";
@@ -149,7 +159,7 @@ export function LivePlayer({
   const [muted, setMuted] = useState(true);
 
   const progressStorageKey =
-    previewMode || draftMode
+    previewMode || draftMode || !resumeProgressEnabled
       ? null
       : registrationToken
         ? `aw_watch_position:${registrationToken}`
@@ -193,7 +203,13 @@ export function LivePlayer({
   // Uma mudança de sessão (recorrência/JIT) sempre começa um progresso novo.
   useEffect(() => {
     const position = clampPosition(
-      draftMode ? elapsedSeconds(scheduledStartAtIso) : previewMode ? 0 : initialResumeSeconds,
+      draftMode
+        ? elapsedSeconds(scheduledStartAtIso)
+        : previewMode
+          ? 0
+          : resumeProgressEnabled
+            ? initialResumeSeconds
+            : elapsedSeconds(scheduledStartAtIso),
       durationSeconds
     );
     playbackPositionRef.current = position;
@@ -203,6 +219,7 @@ export function LivePlayer({
     setScheduledElapsed(elapsedSeconds(scheduledStartAtIso));
     if (previewMode) setPhase("live");
     else if (draftMode) setPhase(phaseFor(elapsedSeconds(scheduledStartAtIso), durationSeconds));
+    else if (!resumeProgressEnabled) setPhase(phaseFor(elapsedSeconds(scheduledStartAtIso), durationSeconds));
     else if (durationSeconds > 0 && position >= durationSeconds) setPhase("ended");
     else if (elapsedSeconds(scheduledStartAtIso) >= durationSeconds && !hasStarted) {
       setPhase("ended");
@@ -216,6 +233,7 @@ export function LivePlayer({
     initialResumeSeconds,
     previewMode,
     registrationToken,
+    resumeProgressEnabled,
     scheduledStartAtIso,
   ]);
 
@@ -235,7 +253,7 @@ export function LivePlayer({
   }, [durationSeconds, progressStorageKey, updatePlaybackPosition]);
 
   useEffect(() => {
-    if (!registrationToken || previewMode || draftMode) return;
+    if (!registrationToken || previewMode || draftMode || !resumeProgressEnabled) return;
     let cancelled = false;
     getRecordedPlaybackPosition(registrationToken)
       .then((position) => {
@@ -251,16 +269,23 @@ export function LivePlayer({
     return () => {
       cancelled = true;
     };
-  }, [draftMode, durationSeconds, previewMode, registrationToken, updatePlaybackPosition]);
+  }, [
+    draftMode,
+    durationSeconds,
+    previewMode,
+    registrationToken,
+    resumeProgressEnabled,
+    updatePlaybackPosition,
+  ]);
 
-  // Relógio mestre: antes do horário ele só mantém a contagem regressiva. A
-  // partir do início, a duração é definida pelo progresso individual do vídeo.
+  // Relógio mestre: sem continuidade ele define toda a cronologia. Com ela
+  // ligada, só mantém a contagem regressiva antes da entrada na sala.
   useEffect(() => {
     if (previewMode) return;
     const tick = () => {
       const e = elapsedSeconds(scheduledStartAtIso);
       setScheduledElapsed(e);
-      if (draftMode) {
+      if (draftMode || !resumeProgressEnabled) {
         setElapsed(clampPosition(e, durationSeconds));
         setPhase(phaseFor(e, durationSeconds));
         return;
@@ -273,7 +298,7 @@ export function LivePlayer({
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [draftMode, durationSeconds, previewMode, scheduledStartAtIso]);
+  }, [draftMode, durationSeconds, previewMode, resumeProgressEnabled, scheduledStartAtIso]);
 
   // Heartbeat de presença (métricas reais no admin). Não conta no preview.
   // Inscrito → por token; anônimo (link público) → por id de navegador.

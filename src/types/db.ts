@@ -55,6 +55,8 @@ export type Webinar = {
   video_external_url: string | null;
   video_autoplay: boolean;
   video_fullscreen: boolean;
+  /** Quando ligado, cada pessoa retoma a aula no próprio ponto salvo. */
+  resume_progress_enabled: boolean;
   // Etapa 7 — vendas
   sales_notification_title: string | null;
   // Etapa 8 — audiência
