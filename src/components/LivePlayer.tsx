@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { elapsedSeconds, postLiveOfferOpen, POST_LIVE_OFFER_UNTIL } from "@/lib/time";
-import { recordHeartbeat, recordAnonHeartbeat } from "@/app/actions/heartbeat";
+import {
+  getRecordedPlaybackPosition,
+  recordHeartbeat,
+  recordAnonHeartbeat,
+} from "@/app/actions/heartbeat";
 import { SimulatedChat } from "./SimulatedChat";
 import { TimedOffer } from "./TimedOffer";
 import { SupportBox } from "./SupportBox";
@@ -43,6 +47,10 @@ type Props = {
   audience: AudienceConfig;
   /** Token de acesso da inscrição — usado para o heartbeat de métricas. */
   registrationToken?: string | null;
+  /** Ponto já salvo no servidor para esta inscrição/sessão. */
+  initialResumeSeconds?: number;
+  /** Há registro de que este link já iniciou esta sessão. */
+  hasStarted?: boolean;
   /** Id do webinar — usado p/ contar quem assiste anônimo (link público sem
    *  inscrição). Sem registrationToken, o heartbeat cai pro modo anônimo. */
   webinarId?: string | null;
@@ -66,6 +74,11 @@ function phaseFor(elapsed: number, duration: number): Phase {
   if (elapsed < 0) return "before";
   if (elapsed >= duration) return "ended";
   return "live";
+}
+
+function clampPosition(position: number, duration: number) {
+  const safe = Number.isFinite(position) ? Math.max(0, position) : 0;
+  return duration > 0 ? Math.min(safe, duration) : safe;
 }
 
 /** Espectadores "ao vivo" fictícios: oscila entre min e max ao longo da aula. */
@@ -100,6 +113,8 @@ export function LivePlayer({
   fullscreen,
   audience,
   registrationToken,
+  initialResumeSeconds = 0,
+  hasStarted = false,
   webinarId,
   viewerName,
   supportWhatsapp,
@@ -108,32 +123,164 @@ export function LivePlayer({
 }: Props) {
   void autoplay; // o simulated-live sempre força play; mantido p/ futuras opções
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [elapsed, setElapsed] = useState(() => elapsedSeconds(scheduledStartAtIso));
-  const [phaseState, setPhase] = useState<Phase>(() =>
-    phaseFor(elapsedSeconds(scheduledStartAtIso), durationSeconds)
+  const initialScheduledElapsed = elapsedSeconds(scheduledStartAtIso);
+  // Em modo normal, o relógio só libera a entrada na sala. Depois disso,
+  // vídeo, chat e ofertas seguem o ponto individual da pessoa — nunca o
+  // horário global da turma. O draft preserva a simulação temporal do painel.
+  const firstPosition = clampPosition(
+    draftMode ? initialScheduledElapsed : previewMode ? 0 : initialResumeSeconds,
+    durationSeconds
   );
+  const playbackPositionRef = useRef(firstPosition);
+  const desiredPositionRef = useRef(firstPosition);
+  const persistedPositionRef = useRef<number | null>(null);
+  const [elapsed, setElapsed] = useState(firstPosition);
+  const [scheduledElapsed, setScheduledElapsed] = useState(initialScheduledElapsed);
+  const [phaseState, setPhase] = useState<Phase>(() => {
+    if (previewMode) return "live";
+    if (draftMode) return phaseFor(initialScheduledElapsed, durationSeconds);
+    if (firstPosition >= durationSeconds && durationSeconds > 0) return "ended";
+    // Não transforma um link nunca usado em replay após o encerramento global.
+    if (initialScheduledElapsed >= durationSeconds && !hasStarted) return "ended";
+    return initialScheduledElapsed < 0 ? "before" : "live";
+  });
   // No preview forçamos "live" para o admin ver o player independente do horário.
   const phase: Phase = previewMode ? "live" : phaseState;
   const [muted, setMuted] = useState(true);
-  // Relógio mestre: 1x por segundo recalcula elapsed e a fase.
+
+  const progressStorageKey =
+    previewMode || draftMode
+      ? null
+      : registrationToken
+        ? `aw_watch_position:${registrationToken}`
+        : webinarId
+          ? `aw_watch_position:${webinarId}:${scheduledStartAtIso}`
+          : null;
+
+  /** Atualiza o ponto sem nunca retroceder por uma resposta antiga da rede. */
+  const updatePlaybackPosition = useCallback(
+    (position: number, persist = true) => {
+      const next = clampPosition(
+        Math.max(playbackPositionRef.current, position),
+        durationSeconds
+      );
+      playbackPositionRef.current = next;
+      desiredPositionRef.current = next;
+      const storedPosition = Math.floor(next);
+      setElapsed((previous) =>
+        Math.floor(previous) === storedPosition ? previous : next
+      );
+
+      if (
+        persist &&
+        progressStorageKey &&
+        persistedPositionRef.current !== storedPosition
+      ) {
+        try {
+          localStorage.setItem(progressStorageKey, String(storedPosition));
+          persistedPositionRef.current = storedPosition;
+        } catch {
+          // O player continua funcionando mesmo em navegação privada/storage bloqueado.
+        }
+      }
+
+      if (durationSeconds > 0 && next >= durationSeconds) setPhase("ended");
+      return next;
+    },
+    [durationSeconds, progressStorageKey]
+  );
+
+  // Uma mudança de sessão (recorrência/JIT) sempre começa um progresso novo.
   useEffect(() => {
+    const position = clampPosition(
+      draftMode ? elapsedSeconds(scheduledStartAtIso) : previewMode ? 0 : initialResumeSeconds,
+      durationSeconds
+    );
+    playbackPositionRef.current = position;
+    desiredPositionRef.current = position;
+    persistedPositionRef.current = null;
+    setElapsed(position);
+    setScheduledElapsed(elapsedSeconds(scheduledStartAtIso));
+    if (previewMode) setPhase("live");
+    else if (draftMode) setPhase(phaseFor(elapsedSeconds(scheduledStartAtIso), durationSeconds));
+    else if (durationSeconds > 0 && position >= durationSeconds) setPhase("ended");
+    else if (elapsedSeconds(scheduledStartAtIso) >= durationSeconds && !hasStarted) {
+      setPhase("ended");
+    } else {
+      setPhase(elapsedSeconds(scheduledStartAtIso) < 0 ? "before" : "live");
+    }
+  }, [
+    durationSeconds,
+    draftMode,
+    hasStarted,
+    initialResumeSeconds,
+    previewMode,
+    registrationToken,
+    scheduledStartAtIso,
+  ]);
+
+  // Recupera primeiro a cópia local (últimos segundos) e depois confirma o
+  // maior ponto salvo no servidor, permitindo continuar até em outro aparelho.
+  useEffect(() => {
+    if (!progressStorageKey) return;
+    try {
+      const saved = Number(localStorage.getItem(progressStorageKey));
+      if (Number.isFinite(saved)) {
+        const next = updatePlaybackPosition(saved, false);
+        if (next > 0 && next < durationSeconds) setPhase("live");
+      }
+    } catch {
+      // Storage indisponível: o ponto remoto continua sendo usado para inscritos.
+    }
+  }, [durationSeconds, progressStorageKey, updatePlaybackPosition]);
+
+  useEffect(() => {
+    if (!registrationToken || previewMode || draftMode) return;
+    let cancelled = false;
+    getRecordedPlaybackPosition(registrationToken)
+      .then((position) => {
+        if (cancelled) return;
+        const next = updatePlaybackPosition(position, false);
+        if (next > 0 && next < durationSeconds) setPhase("live");
+        const video = videoRef.current;
+        if (video && video.readyState >= 1 && next > video.currentTime + 1) {
+          video.currentTime = next;
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [draftMode, durationSeconds, previewMode, registrationToken, updatePlaybackPosition]);
+
+  // Relógio mestre: antes do horário ele só mantém a contagem regressiva. A
+  // partir do início, a duração é definida pelo progresso individual do vídeo.
+  useEffect(() => {
+    if (previewMode) return;
     const tick = () => {
       const e = elapsedSeconds(scheduledStartAtIso);
-      setElapsed(e);
-      setPhase(phaseFor(e, durationSeconds));
+      setScheduledElapsed(e);
+      if (draftMode) {
+        setElapsed(clampPosition(e, durationSeconds));
+        setPhase(phaseFor(e, durationSeconds));
+        return;
+      }
+      setPhase((current) => {
+        if (current === "ended") return current;
+        return e < 0 ? "before" : "live";
+      });
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [scheduledStartAtIso, durationSeconds]);
+  }, [draftMode, durationSeconds, previewMode, scheduledStartAtIso]);
 
   // Heartbeat de presença (métricas reais no admin). Não conta no preview.
   // Inscrito → por token; anônimo (link público) → por id de navegador.
   //
-  // Só bate ponto quem está DE FATO na aula: fora da janela (antes do início ou
-  // depois do fim) e nas telas de "aula encerrada"/replay travado não conta —
-  // senão uma aba esquecida aberta viraria play, "até o fim" e "assistindo
-  // agora" pra sempre.
+  // Só bate ponto quem está DE FATO na aula: a contagem regressiva, um vídeo
+  // pausado ou a tela de encerramento não contam — senão uma aba esquecida
+  // aberta viraria play, "até o fim" e "assistindo agora" pra sempre.
   useEffect(() => {
     if (previewMode || draftMode) return;
     if (!registrationToken && !webinarId) return;
@@ -153,10 +300,10 @@ export function LivePlayer({
     }
 
     const beat = () => {
-      const e = elapsedSeconds(scheduledStartAtIso);
-      if (e < 0) return; // fase "antes": ainda não entrou na live
-      if (durationSeconds > 0 && e >= durationSeconds) return; // aula encerrada
-      const pos = Math.min(Math.floor(e), durationSeconds);
+      const video = videoRef.current;
+      if (phase !== "live" || !video || video.paused || video.ended) return;
+      const currentPosition = Math.floor(playbackPositionRef.current);
+      const pos = durationSeconds > 0 ? Math.min(currentPosition, durationSeconds) : currentPosition;
       if (registrationToken) {
         recordHeartbeat(registrationToken, pos, scheduledStartAtIso).catch(() => {});
       } else if (webinarId && anonId) {
@@ -171,6 +318,7 @@ export function LivePlayer({
     webinarId,
     scheduledStartAtIso,
     durationSeconds,
+    phase,
     previewMode,
     draftMode,
   ]);
@@ -216,7 +364,8 @@ export function LivePlayer({
     video.src = videoUrl;
   }, [videoUrl, phase]);
 
-  // Sincroniza o <video> com o elapsed enquanto estiver "live".
+  // Posiciona uma única vez no ponto individual já salvo. Não há drift de
+  // relógio: se a pessoa sair, o vídeo fica exatamente onde ela parou.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || phase !== "live") return;
@@ -226,67 +375,36 @@ export function LivePlayer({
       return;
     }
 
-    // Sala pode durar mais que o vídeo (fechamento pós-aula): ao passar do
-    // fim do vídeo, congela no último quadro em vez de reiniciar do zero.
-    const pastVideoEnd = () => {
-      const dur = video.duration;
-      return (
-        Number.isFinite(dur) &&
-        dur > 0 &&
-        elapsedSeconds(scheduledStartAtIso) >= dur
-      );
-    };
-
-    const sync = () => {
-      if (pastVideoEnd()) {
-        if (!video.paused) video.pause();
+    let positioned = false;
+    const resume = () => {
+      if (positioned) return;
+      const position = clampPosition(desiredPositionRef.current, durationSeconds);
+      if (durationSeconds > 0 && position >= durationSeconds) {
+        setPhase("ended");
         return;
       }
-      const t = elapsedSeconds(scheduledStartAtIso);
-      // Tolerância folgada: re-seeks frequentes causam engasgo. Só corrige a
-      // deriva quando ela passa de ~3s.
-      if (Math.abs(video.currentTime - t) > 3) {
-        video.currentTime = t; // corrige deriva
-      }
-      if (video.paused) video.play().catch(() => {});
-    };
-
-    // Posiciona no instante "ao vivo" apenas uma vez (no primeiro canplay).
-    // Re-seekar a cada canplay (que dispara após cada rebuffer) provoca travadas.
-    let positioned = false;
-    const onCanPlay = () => {
-      if (pastVideoEnd()) return;
       if (!positioned) {
-        video.currentTime = elapsedSeconds(scheduledStartAtIso);
+        video.currentTime = position;
         positioned = true;
       }
       if (video.paused) video.play().catch(() => {});
     };
-    video.addEventListener("canplay", onCanPlay);
+    video.addEventListener("canplay", resume);
 
-    const driftId = setInterval(sync, 5000);
-
-    // bloquear pause e seek manual (exceto após o fim do vídeo)
+    // Sem controles o visitante não busca/põe em pausa. Mantemos a proteção
+    // contra atalhos que possam pausar o elemento nativo.
     const onPause = () => {
-      if (phase === "live" && !pastVideoEnd()) video.play().catch(() => {});
-    };
-    const onSeeking = () => {
-      if (pastVideoEnd()) return;
-      const t = elapsedSeconds(scheduledStartAtIso);
-      if (Math.abs(video.currentTime - t) > 3) video.currentTime = t;
+      if (phase === "live" && !video.ended) video.play().catch(() => {});
     };
     video.addEventListener("pause", onPause);
-    video.addEventListener("seeking", onSeeking);
 
-    if (video.readyState >= 3) onCanPlay();
+    if (video.readyState >= 3) resume();
 
     return () => {
-      video.removeEventListener("canplay", onCanPlay);
+      video.removeEventListener("canplay", resume);
       video.removeEventListener("pause", onPause);
-      video.removeEventListener("seeking", onSeeking);
-      clearInterval(driftId);
     };
-  }, [phase, scheduledStartAtIso, previewMode]);
+  }, [durationSeconds, phase, previewMode]);
 
   void accentColor; // cores vêm do tema do player (vermelho/branco)
   const brand = brandName || presenterName || title;
@@ -310,7 +428,7 @@ export function LivePlayer({
     postLiveOfferOpen(
       new Date(scheduledStartAtIso).getTime(),
       timezone,
-      new Date(scheduledStartAtIso).getTime() + elapsed * 1000
+      Date.now()
     ));
 
   const endedScreen = shell(
@@ -344,7 +462,7 @@ export function LivePlayer({
     return shell(
       <HwCountdownScreen
         title={shownTitle}
-        ms={Math.max(0, -elapsed) * 1000}
+        ms={Math.max(0, -scheduledElapsed) * 1000}
         presenterName={presenterName}
         presenterAvatarUrl={presenterAvatarUrl}
       />
@@ -373,6 +491,11 @@ export function LivePlayer({
             disablePictureInPicture={!fullscreen}
             onContextMenu={(e) => e.preventDefault()}
             className={`h-full w-full object-contain ${previewMode ? "" : "pointer-events-none"}`}
+            onTimeUpdate={(event) => updatePlaybackPosition(event.currentTarget.currentTime)}
+            onEnded={() => {
+              updatePlaybackPosition(durationSeconds);
+              setPhase("ended");
+            }}
           />
           {!videoUrl && (
             <div className="absolute inset-0 grid place-items-center px-6 text-center">
@@ -451,7 +574,9 @@ export function LivePlayer({
             </h1>
             <p className="mt-1 text-[13px] text-[var(--hw-muted)]">
               {audience.enabled && <>{viewers} assistindo agora · </>}
-              {minutos > 0 ? `começou há ${minutos} minuto${minutos > 1 ? "s" : ""}` : "começou agora"}
+              {minutos > 0
+                ? `${minutos} minuto${minutos > 1 ? "s" : ""} de aula assistidos`
+                : "a aula começou agora"}
             </p>
           </div>
           <div className="flex items-center gap-3">

@@ -85,6 +85,17 @@ function readSavedValue<T>(key: string): T | null {
   }
 }
 
+/** Progresso que o player gravou neste navegador para a inscrição atual. */
+function savedPlaybackPosition(token: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const value = Number(localStorage.getItem(`aw_watch_position:${token}`));
+    return Number.isFinite(value) ? Math.max(0, value) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function browserLeadSource() {
   return {
     origin: window.location.href,
@@ -146,6 +157,15 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   // a sala fecha. A oferta da live que acabou continua na tela até as 22:00.
   const endedToday = mounted ? lastEndedSessionToday(webinar, now) : null;
   const offerAfterEnd = !!endedToday && postLiveOfferOpen(endedToday.getTime(), tz, now);
+  // Quem entrou na turma e já acumulou progresso pode voltar mesmo depois do
+  // fim do horário global. A pessoa retoma o próprio ponto; quem nunca abriu a
+  // aula continua vendo a próxima turma, sem transformar o link em replay.
+  const resumeEndedSession =
+    !draftView &&
+    !!endedToday &&
+    !!session &&
+    session.iso === endedToday.toISOString() &&
+    savedPlaybackPosition(session.token) > 0;
 
   // Cadastrado (cache): garante uma inscrição pra sessão de hoje quando a janela
   // abre — assim a presença/identidade é registrada toda semana sem repreencher.
@@ -234,6 +254,38 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   if (!mounted) {
     return shell(
       <p className="px-5 py-24 text-center text-[15px] text-[var(--hw-muted)]">Carregando…</p>
+    );
+  }
+
+  if (resumeEndedSession && session) {
+    return (
+      <LivePlayer
+        title={webinar.title}
+        presenterName={webinar.presenter_name}
+        presenterAvatarUrl={webinar.presenter_avatar_url}
+        brandName={brandName}
+        logoUrl={webinar.logo_url}
+        webinarId={webinar.id}
+        registrationToken={session.token}
+        viewerName={person?.name ?? null}
+        supportWhatsapp={supportWhatsapp}
+        videoUrl={videoUrl}
+        durationSeconds={webinar.duration_seconds}
+        scheduledStartAtIso={session.iso}
+        timezone={tz}
+        messages={messages}
+        offers={offers}
+        sales={sales}
+        salesTitle={webinar.sales_notification_title}
+        autoplay={webinar.video_autoplay}
+        fullscreen={webinar.video_fullscreen}
+        audience={{
+          enabled: webinar.audience_enabled,
+          mode: webinar.audience_mode,
+          min: webinar.audience_min,
+          max: webinar.audience_max,
+        }}
+      />
     );
   }
 

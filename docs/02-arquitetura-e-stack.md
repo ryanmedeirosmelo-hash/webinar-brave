@@ -17,16 +17,17 @@ Pacotes Supabase: `@supabase/supabase-js` e `@supabase/ssr`.
 ## Como o "simulated live" roda sem servidor de streaming
 
 Não precisamos transmitir vídeo. O MP4 é servido estático (Supabase Storage ou `public/`).
-O truque é **puramente no cliente + um timestamp no banco**:
+O horário agendado só abre a sala; a aula passa a seguir o **progresso individual**:
 
 ```
-scheduled_start_at (no banco)  ──►  o player calcula:
-    elapsed = agora - scheduled_start_at
-    video.currentTime = elapsed   (e bloqueia seek/pause)
+scheduled_start_at  ──►  libera o player quando chega a hora
+video.currentTime   ──►  começa em 0 para quem entra atrasado
+watch_sessions      ──►  salva o maior ponto assistido da inscrição
 ```
 
-Ou seja, qualquer pessoa pode recarregar a página: o vídeo sempre volta pro ponto certo
-porque o ponto certo é derivado do relógio, não de onde ela parou.
+Assim, uma pessoa que entra às 8:05 começa no início da aula. Ao sair e voltar, o player
+retoma o ponto salvo — no mesmo navegador pelos segundos gravados localmente e, para links
+de inscrição, também pelo último heartbeat salvo no servidor.
 
 ## Estrutura de pastas sugerida
 

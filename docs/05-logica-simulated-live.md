@@ -5,28 +5,34 @@ funcional** — pode colar e ajustar nomes/estilo.
 
 ## Princípio
 
-Tudo deriva de **uma conta só**:
+Há duas referências de tempo, com responsabilidades diferentes:
 
 ```
-elapsed (segundos) = (agora − scheduled_start_at) / 1000
+scheduled_start_at  → abre a sala no horário certo
+video.currentTime   → controla vídeo, chat e ofertas da própria pessoa
 ```
 
-- `elapsed < 0` → ainda não começou (contagem regressiva).
-- `0 ≤ elapsed < duration_seconds` → tocando; `video.currentTime` deve ser ≈ `elapsed`.
-- `elapsed ≥ duration_seconds` → encerrado.
+- Antes de `scheduled_start_at`, a pessoa vê a contagem regressiva.
+- Ao entrar depois do horário, o vídeo começa em `0` — não no minuto em que a turma já está.
+- `currentTime` é salvo no navegador a cada segundo e no servidor a cada 20 segundos.
+- Ao voltar, o maior ponto salvo é aplicado uma única vez; não há sincronização periódica com
+  o relógio global.
+- Ao chegar ao fim do vídeo, o link mostra a tela de encerramento e não permite replay.
 
-Como `scheduled_start_at` é fixo no banco, recarregar a página **não reinicia** o vídeo:
-recalculamos `elapsed` e damos seek de novo.
+Exemplo: sessão às 8:00, entrada às 8:05. A aula inicia em 00:00. Se a pessoa sai em 20:14
+e retorna, a reprodução volta para 20:14 (ou, em outro aparelho, ao último heartbeat salvo).
 
 ## Cuidados que evitam bug
 
-1. **Bloquear seek/pause**: o usuário não pode adiantar/atrasar. Se ele tentar, forçamos de volta.
-2. **Corrigir deriva (drift)**: a cada ~5s, comparar `video.currentTime` com o `elapsed` real;
-   se divergir > ~1.5s, re-sincronizar.
+1. **Bloquear seek/pause**: o usuário não pode adiantar/atrasar. Se ele tentar, o player
+   continua reproduzindo o ponto individual já alcançado.
+2. **Persistir antes de depender da rede**: `localStorage` preserva os últimos segundos mesmo
+   se a aba fechar antes do próximo heartbeat; `watch_sessions.last_position_seconds` permite
+   retomar pelo link em outro aparelho.
 3. **Autoplay com som é bloqueado pelos browsers**: comece **mutado** e mostre um botão
    "🔊 Ativar som" (1 clique do usuário libera o áudio). Padrão de todo player de webinar.
-4. **Latência de carregamento**: se o vídeo demora a bufferizar, o `elapsed` continua correndo;
-   por isso re-sincronizamos após o `canplay`.
+4. **Latência de carregamento**: ao receber `canplay`, posicionamos uma vez no progresso salvo
+   e então deixamos o vídeo avançar normalmente.
 5. **Fuso**: nunca calcule com horário local "string". Use os timestamps em ms (UTC).
 
 ---
@@ -79,72 +85,46 @@ type Props = {
 
 type Phase = "before" | "live" | "ended";
 
-function phaseFor(elapsed: number, duration: number): Phase {
-  if (elapsed < 0) return "before";
-  if (elapsed >= duration) return "ended";
-  return "live";
-}
-
 export function LivePlayer({
   videoUrl, durationSeconds, scheduledStartAtIso, messages, offers,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [elapsed, setElapsed] = useState(() => elapsedSeconds(scheduledStartAtIso));
+  const [elapsed, setElapsed] = useState(0);
   const [phase, setPhase] = useState<Phase>(() =>
-    phaseFor(elapsedSeconds(scheduledStartAtIso), durationSeconds)
+    elapsedSeconds(scheduledStartAtIso) < 0 ? "before" : "live"
   );
   const [muted, setMuted] = useState(true);
 
-  // Relógio mestre: 1x por segundo recalcula elapsed e a fase.
+  // O relógio só controla a contagem regressiva; nunca reposiciona o vídeo.
   useEffect(() => {
     const tick = () => {
       const e = elapsedSeconds(scheduledStartAtIso);
-      setElapsed(e);
-      setPhase(phaseFor(e, durationSeconds));
+      if (e < 0) setPhase("before");
+      else setPhase((current) => current === "ended" ? current : "live");
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [scheduledStartAtIso, durationSeconds]);
 
-  // Sincroniza o <video> com o elapsed enquanto estiver "live".
+  // Restaura uma única vez o ponto salvo e acompanha o vídeo real.
   useEffect(() => {
     const video = videoRef.current;
     if (!video || phase !== "live") return;
 
-    const target = elapsedSeconds(scheduledStartAtIso);
-
-    const sync = () => {
-      const t = elapsedSeconds(scheduledStartAtIso);
-      if (Math.abs(video.currentTime - t) > 1.5) {
-        video.currentTime = t; // corrige deriva
-      }
-      if (video.paused) video.play().catch(() => {});
-    };
-
-    // seek inicial assim que dá pra tocar
-    const onCanPlay = () => { video.currentTime = elapsedSeconds(scheduledStartAtIso); sync(); };
+    const saved = Number(localStorage.getItem("watch-position") ?? 0);
+    const onCanPlay = () => { video.currentTime = saved; video.play().catch(() => {}); };
     video.addEventListener("canplay", onCanPlay);
-
-    // re-sync periódico (drift)
-    const driftId = setInterval(sync, 5000);
 
     // bloquear pause e seek manual
     const onPause = () => { if (phase === "live") video.play().catch(() => {}); };
-    const onSeeking = () => {
-      const t = elapsedSeconds(scheduledStartAtIso);
-      if (Math.abs(video.currentTime - t) > 1.5) video.currentTime = t;
-    };
     video.addEventListener("pause", onPause);
-    video.addEventListener("seeking", onSeeking);
 
     if (video.readyState >= 3) onCanPlay(); // já pronto
 
     return () => {
       video.removeEventListener("canplay", onCanPlay);
       video.removeEventListener("pause", onPause);
-      video.removeEventListener("seeking", onSeeking);
-      clearInterval(driftId);
     };
   }, [phase, scheduledStartAtIso]);
 
@@ -183,6 +163,12 @@ export function LivePlayer({
           // sem `controls`: o usuário não controla nada
           controlsList="nodownload noplaybackrate"
           disablePictureInPicture
+          onTimeUpdate={(event) => {
+            const position = event.currentTarget.currentTime;
+            localStorage.setItem("watch-position", String(Math.floor(position)));
+            setElapsed(position);
+          }}
+          onEnded={() => setPhase("ended")}
           onContextMenu={(e) => e.preventDefault()}
           style={{ width: "100%", pointerEvents: "none" }}
         />
@@ -277,7 +263,8 @@ export function TimedOffer({ offers, elapsed }: { offers: Offer[]; elapsed: numb
 
 1. Inscreva-se com horário = **agora + 1 min**.
 2. Abra `/watch/<token>` → veja a contagem `00:59 → 00:00`.
-3. Ao zerar, o vídeo começa mutado; clique em **Ativar som**.
-4. Aguarde ~30s e **recarregue (F5)** → o vídeo deve voltar para ~30s, **não** para o início.
-5. Tente arrastar a barra (não há controles, mas teste pause via teclado) → deve voltar sozinho.
+3. Ao zerar, o vídeo começa mutado em 00:00; clique em **Ativar som**.
+4. Aguarde ~30s e feche/reabra a página → o vídeo deve voltar para ~30s, não para o minuto
+   global da turma nem para o início.
+5. Confira que chat e oferta usam os mesmos ~30s individuais.
 6. Confira o chat surgindo em 5s/20s/45s e a oferta entre 60s–300s.

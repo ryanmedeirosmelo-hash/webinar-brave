@@ -26,7 +26,8 @@ export default async function WatchPage({
 
   if (!registration) notFound();
 
-  const [{ data: webinar }, { data: messages }, { data: offers }, { data: sales }] =
+  const viewerKey = `${registration.id}:${registration.scheduled_start_at}`;
+  const [{ data: webinar }, { data: messages }, { data: offers }, { data: sales }, { data: watchSession }] =
     await Promise.all([
       supabase
         .from("webinars")
@@ -48,6 +49,11 @@ export default async function WatchPage({
         .select("*")
         .eq("webinar_id", registration.webinar_id)
         .order("at_seconds", { ascending: true }),
+      supabase
+        .from("watch_sessions")
+        .select("last_position_seconds")
+        .eq("viewer_key", viewerKey)
+        .maybeSingle<{ last_position_seconds: number | null }>(),
     ]);
 
   if (!webinar) notFound();
@@ -79,6 +85,8 @@ export default async function WatchPage({
           max: webinar.audience_max,
         }}
         registrationToken={token}
+        initialResumeSeconds={Math.max(0, watchSession?.last_position_seconds ?? 0)}
+        hasStarted={!!watchSession}
         webinarId={webinar.id}
         viewerName={registration.name}
         supportWhatsapp={supportWhatsAppNumber(webinar.integrations)}
