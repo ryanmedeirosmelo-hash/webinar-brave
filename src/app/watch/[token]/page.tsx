@@ -93,6 +93,7 @@ export default async function WatchPage({
         webinarId={webinar.id}
         viewerName={registration.name}
         supportWhatsapp={supportWhatsAppNumber(webinar.integrations)}
+        thankYouPath={`/obrigado/${webinar.slug}`}
         previewMode={previewMode}
       />
     </main>

@@ -60,6 +60,8 @@ type Props = {
   viewerName?: string | null;
   /** WhatsApp da equipe, configurado na integração deste webinar. */
   supportWhatsapp?: string | null;
+  /** Página final própria do webinar, exibida quando a transmissão termina. */
+  thankYouPath?: string | null;
   /** Modo admin/teste: libera controles nativos (velocidade, seek) e desliga
    *  a sincronia por relógio. Acionado por ?preview=1 no link. */
   previewMode?: boolean;
@@ -121,6 +123,7 @@ export function LivePlayer({
   webinarId,
   viewerName,
   supportWhatsapp,
+  thankYouPath,
   previewMode,
   draftMode,
 }: Props) {
@@ -440,6 +443,15 @@ export function LivePlayer({
       {content}
     </HwPage>
   );
+
+  // A inscrição continua indo para a sala/contagem antes da aula. Somente no
+  // encerramento levamos a pessoa para a página final daquele webinar. Previews
+  // continuam nesta tela para o painel conseguir revisar o estado encerrado.
+  useEffect(() => {
+    if (phase !== "ended" || !thankYouPath || previewMode || draftMode) return;
+    const access = registrationToken ? `?acesso=${encodeURIComponent(registrationToken)}` : "";
+    window.location.replace(`${thankYouPath}${access}`);
+  }, [draftMode, phase, previewMode, registrationToken, thankYouPath]);
 
   // ---------- ENCERRADO ----------
   // A inscrição fixa o início da própria sessão; por isso a fase "ended" já

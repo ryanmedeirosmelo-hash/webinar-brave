@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import { displayTitle } from "@/components/Brand";
 import { HwAvatar, HwPage } from "@/components/HwKit";
 import { SupportBox } from "@/components/SupportBox";
+import { TimedOffer } from "@/components/TimedOffer";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { POST_LIVE_OFFER_UNTIL, postLiveOfferOpen } from "@/lib/time";
 import { supportWhatsAppNumber } from "@/lib/whatsapp";
-import type { Webinar } from "@/types/db";
+import type { Offer, Registration, Webinar } from "@/types/db";
 
 // Cada página é derivada do webinar solicitado; não pode reutilizar o HTML de outro slug.
 export const dynamic = "force-dynamic";
@@ -19,7 +21,8 @@ export default async function ThankYouPage({
 }) {
   const { slug } = await params;
   const { acesso } = await searchParams;
-  const { data: webinar } = await supabaseAdmin()
+  const supabase = supabaseAdmin();
+  const { data: webinar } = await supabase
     .from("webinars")
     .select("*")
     .eq("slug", slug)
@@ -31,7 +34,29 @@ export default async function ThankYouPage({
   const title = displayTitle(webinar.title);
   const presenterName = webinar.presenter_name?.trim() || null;
   const brandName = presenterName || title;
-  const accessToken = typeof acesso === "string" ? acesso : null;
+  const requestedToken = typeof acesso === "string" ? acesso : null;
+  const [{ data: registration }, { data: offers }] = await Promise.all([
+    requestedToken
+      ? supabase
+          .from("registrations")
+          .select("*")
+          .eq("access_token", requestedToken)
+          .eq("webinar_id", webinar.id)
+          .maybeSingle<Registration>()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from("offers")
+      .select("*")
+      .eq("webinar_id", webinar.id)
+      .order("show_at_seconds", { ascending: true }),
+  ]);
+  const offerWindowOpen = registration
+    ? postLiveOfferOpen(
+        new Date(registration.scheduled_start_at).getTime(),
+        webinar.timezone,
+        Date.now()
+      )
+    : true;
 
   return (
     <HwPage
@@ -61,14 +86,14 @@ export default async function ThankYouPage({
               </svg>
             </div>
             <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.2em] text-[var(--hw-red)]">
-              Tudo certo
+              Aula encerrada
             </p>
             <h1 className="mt-3 text-balance text-3xl font-bold tracking-tight text-[var(--hw-text)] sm:text-4xl">
-              Seu lugar em {title} está reservado.
+              Obrigado por acompanhar {title}.
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-[16px] leading-7 text-[var(--hw-muted)]">
-              {webinar.description?.trim() ||
-                "Obrigado por se inscrever. Guarde este momento: em breve você receberá as orientações para acompanhar a aula."}
+              A transmissão chegou ao fim. Em breve você receberá as próximas orientações no
+              e-mail cadastrado.
             </p>
           </div>
 
@@ -105,13 +130,31 @@ export default async function ThankYouPage({
               )}
 
               <Link
-                href={accessToken ? `/watch/${encodeURIComponent(accessToken)}` : `/${webinar.slug}`}
+                href={`/${webinar.slug}`}
                 className="inline-flex w-full items-center justify-center rounded-full bg-[var(--hw-red)] px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-[var(--hw-red-hover)] active:scale-[0.99]"
               >
-                {accessToken ? "Acessar minha aula" : "Ver página do webinar"}
+                Ver próximos horários
               </Link>
             </div>
           </div>
+
+          {offerWindowOpen && (
+            <div className="mt-5">
+              <p className="mb-2 text-center text-[12px] font-medium text-[var(--hw-muted)]">
+                A condição apresentada na aula fica liberada até as {POST_LIVE_OFFER_UNTIL} de hoje.
+              </p>
+              <TimedOffer
+                offers={(offers ?? []) as Offer[]}
+                elapsed={webinar.duration_seconds - 1}
+                webinarId={webinar.id}
+                registrationToken={registration?.access_token ?? null}
+                sessionStartIso={registration?.scheduled_start_at ?? null}
+                previewMode={!registration}
+                forceVisible={!registration}
+                stacked
+              />
+            </div>
+          )}
 
           <div className="mt-5">
             <SupportBox whatsapp={supportWhatsAppNumber(webinar.integrations)} />

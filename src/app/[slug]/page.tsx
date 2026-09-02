@@ -119,6 +119,7 @@ export default async function WebinarLandingPage({
             max: webinar.audience_max,
           }}
           resumeProgressEnabled={webinar.resume_progress_enabled}
+          thankYouPath={`/obrigado/${webinar.slug}`}
         />
       </main>
     );

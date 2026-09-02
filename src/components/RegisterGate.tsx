@@ -262,9 +262,6 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
       /* ignore */
     }
 
-    // A confirmação também passa pela página final individual do webinar. O
-    // token é mantido somente para o CTA abrir a sala certa desta inscrição.
-    window.location.assign(`/obrigado/${webinar.slug}?acesso=${encodeURIComponent(s.token)}`);
   }
 
   const brandName = webinar.presenter_name || displayTitle(webinar.title);
@@ -302,6 +299,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         resumeProgressEnabled={webinar.resume_progress_enabled}
         viewerName={person?.name ?? null}
         supportWhatsapp={supportWhatsapp}
+        thankYouPath={`/obrigado/${webinar.slug}`}
         videoUrl={videoUrl}
         durationSeconds={webinar.duration_seconds}
         scheduledStartAtIso={session.iso}
@@ -386,6 +384,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         draftMode
         resumeProgressEnabled={webinar.resume_progress_enabled}
         supportWhatsapp={supportWhatsapp}
+        thankYouPath={`/obrigado/${webinar.slug}`}
         audience={{ enabled: webinar.audience_enabled, mode: webinar.audience_mode, min: webinar.audience_min, max: webinar.audience_max }}
       />
     );
@@ -405,6 +404,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         resumeProgressEnabled={webinar.resume_progress_enabled}
         viewerName={person?.name ?? null}
         supportWhatsapp={supportWhatsapp}
+        thankYouPath={`/obrigado/${webinar.slug}`}
         videoUrl={videoUrl}
         durationSeconds={webinar.duration_seconds}
         scheduledStartAtIso={startIso}
