@@ -473,7 +473,9 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
                   return (
                     <tr
                       key={g.label}
-                      onClick={() => applyFilter(period, webinarFilter, g.weekday)}
+                      onClick={() =>
+                        applyFilter(period, webinarFilter, g.weekday, sessionDate)
+                      }
                       className={`cursor-pointer border-t border-slate-800/80 transition ${
                         active ? "bg-[#cbad78]/10" : "hover:bg-slate-800/40"
                       } ${isTotal ? "font-semibold" : ""}`}
