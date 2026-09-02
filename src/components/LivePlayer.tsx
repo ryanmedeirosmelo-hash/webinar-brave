@@ -129,6 +129,7 @@ export function LivePlayer({
 }: Props) {
   void autoplay; // o simulated-live sempre força play; mantido p/ futuras opções
   const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<HTMLDivElement>(null);
   const initialScheduledElapsed = elapsedSeconds(scheduledStartAtIso);
   // Com continuidade ligada, o relógio só libera a entrada na sala. Depois
   // disso vídeo, chat e ofertas seguem o ponto individual. Desligada, o
@@ -160,6 +161,8 @@ export function LivePlayer({
   // No preview forçamos "live" para o admin ver o player independente do horário.
   const phase: Phase = previewMode ? "live" : phaseState;
   const [muted, setMuted] = useState(true);
+  const [volume, setVolume] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const progressStorageKey =
     previewMode || draftMode || !resumeProgressEnabled
@@ -202,6 +205,49 @@ export function LivePlayer({
     },
     [durationSeconds, progressStorageKey]
   );
+
+  function setPlayerVolume(nextVolume: number) {
+    const next = Math.min(1, Math.max(0, nextVolume));
+    const video = videoRef.current;
+    setVolume(next);
+    setMuted(next === 0);
+    if (video) {
+      video.volume = next;
+      video.muted = next === 0;
+      if (next > 0) video.play().catch(() => {});
+    }
+  }
+
+  function toggleMuted() {
+    const video = videoRef.current;
+    const nextMuted = !muted;
+    const nextVolume = nextMuted ? volume : volume || 0.7;
+    setMuted(nextMuted);
+    setVolume(nextVolume);
+    if (video) {
+      video.muted = nextMuted;
+      video.volume = nextVolume;
+      if (!nextMuted) video.play().catch(() => {});
+    }
+  }
+
+  async function toggleFullscreen() {
+    const player = playerRef.current;
+    if (!player) return;
+
+    if (document.fullscreenElement === player) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    await player.requestFullscreen();
+  }
+
+  useEffect(() => {
+    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
 
   // Uma mudança de sessão (recorrência/JIT) sempre começa um progresso novo.
   useEffect(() => {
@@ -517,7 +563,12 @@ export function LivePlayer({
     <div className="mx-auto grid max-w-[1400px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px]">
       {/* ---- Coluna do player ---- */}
       <div className="space-y-4">
-        <div className="relative aspect-video overflow-hidden rounded-2xl bg-black">
+        <div
+          ref={playerRef}
+          className={`relative overflow-hidden bg-black ${
+            isFullscreen ? "h-dvh w-dvw rounded-none" : "aspect-video rounded-2xl"
+          }`}
+        >
           <video
             ref={videoRef}
             autoPlay
@@ -586,12 +637,7 @@ export function LivePlayer({
           {videoUrl && !connecting && muted && !previewMode && (
             <button
               onClick={() => {
-                setMuted(false);
-                const v = videoRef.current;
-                if (v) {
-                  v.muted = false;
-                  v.play().catch(() => {});
-                }
+                setPlayerVolume(volume || 0.7);
               }}
               className="absolute inset-0 z-10 grid cursor-pointer place-items-center bg-black/40 backdrop-blur-[1px]"
               aria-label="Ativar som"
@@ -600,6 +646,59 @@ export function LivePlayer({
                 🔊 Clique para ouvir o áudio
               </span>
             </button>
+          )}
+
+          {videoUrl && !previewMode && (
+            <div
+              className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/65 p-1.5 text-white shadow-lg backdrop-blur-md"
+              role="group"
+              aria-label="Controles do vídeo"
+            >
+              <button
+                type="button"
+                onClick={toggleMuted}
+                className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                aria-label={muted || volume === 0 ? "Ativar som" : "Silenciar"}
+              >
+                {muted || volume === 0 ? (
+                  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-current">
+                    <path d="M4 9v6h4l5 4V5L8 9H4Zm12.7 3 2.15-2.15-1.41-1.41L15.29 10.6 13.14 8.44l-1.41 1.41L13.88 12l-2.15 2.15 1.41 1.41 2.15-2.15 2.15 2.15 1.41-1.41L16.7 12Z" />
+                  </svg>
+                ) : (
+                  <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-current">
+                    <path d="M4 9v6h4l5 4V5L8 9H4Zm12.5 3a3.5 3.5 0 0 0-2-3.15v6.3a3.5 3.5 0 0 0 2-3.15Zm0-7.75v2.1a5.5 5.5 0 0 1 0 11.3v2.1a7.5 7.5 0 0 0 0-15.5Z" />
+                  </svg>
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={muted ? 0 : volume}
+                onChange={(event) => setPlayerVolume(Number(event.target.value))}
+                className="h-1.5 w-20 cursor-pointer accent-[var(--hw-red)]"
+                aria-label="Volume"
+              />
+              {fullscreen && (
+                <button
+                  type="button"
+                  onClick={() => toggleFullscreen().catch(() => {})}
+                  className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                  aria-label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                >
+                  {isFullscreen ? (
+                    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M9 4v5H4m11-5v5h5M9 20v-5H4m16 5v-5h-5" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                      <path d="M9 4H4v5m16 0V4h-5M4 15v5h5m6 0h5v-5" />
+                    </svg>
+                  )}
+                </button>
+              )}
+            </div>
           )}
 
         </div>
