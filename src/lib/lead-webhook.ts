@@ -1,5 +1,6 @@
 import "server-only";
 
+import { COUNTRY_DIAL_CODES } from "@/lib/countries";
 import { zonedParts } from "@/lib/time";
 
 type WebinarWebhookConfig = {
@@ -25,7 +26,6 @@ export type LeadSource = {
 
 type WebhookConfig = { enabled?: unknown; value?: unknown };
 
-const KNOWN_DDIS = ["351", "61", "55", "44", "34", "1"];
 const MAX_SOURCE_LENGTH = 2_000;
 const WEBHOOK_TIMEOUT_MS = 4_000;
 
@@ -51,13 +51,20 @@ function configuredWebhookUrl(integrations: Record<string, unknown> | null): str
 }
 
 function phoneFields(value: string | null) {
-  const raw = (value ?? "").replace(/\D/g, "");
+  const input = (value ?? "").trim();
+  const raw = input.replace(/\D/g, "").replace(/^00/, "");
   if (!raw) {
     return { telefone: "", telefone_full: "", ddi: "55", whatsapp: "" };
   }
 
-  const ddi = KNOWN_DDIS.find((code) => raw.startsWith(code)) ?? "55";
-  const full = raw.startsWith(ddi) ? raw : `${ddi}${raw}`;
+  // O formulário envia o DDI com `+`. Sem esse prefixo, tratamos o valor como
+  // telefone brasileiro legado para não confundir um DDD iniciado por 1, 20,
+  // 30 etc. com um código internacional.
+  const hasInternationalPrefix = input.startsWith("+") || input.startsWith("00");
+  const ddi = hasInternationalPrefix
+    ? COUNTRY_DIAL_CODES.find((code) => raw.startsWith(code)) ?? "55"
+    : "55";
+  const full = hasInternationalPrefix ? raw : `${ddi}${raw}`;
 
   return {
     telefone: full.slice(ddi.length),

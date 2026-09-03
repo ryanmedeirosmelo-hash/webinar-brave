@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
 import { createRegistration, type RegistrationState } from "@/app/actions/registrations";
 import { jitSlots, recurrenceSlots, zonedParts, type JitSlot } from "@/lib/time";
+import { COUNTRIES } from "@/lib/countries";
 import type { FormField, WebinarType } from "@/types/db";
 
 type Props = {
@@ -28,15 +29,6 @@ const FIELD_DEFAULTS: Record<FormField["key"], { label: string; placeholder: str
   email: { label: "E-mail", placeholder: "Seu melhor e-mail" },
   whatsapp: { label: "WhatsApp", placeholder: "Seu telefone" },
 };
-
-const COUNTRIES = [
-  { code: "+55", flag: "🇧🇷" },
-  { code: "+351", flag: "🇵🇹" },
-  { code: "+1", flag: "🇺🇸" },
-  { code: "+34", flag: "🇪🇸" },
-  { code: "+44", flag: "🇬🇧" },
-  { code: "+61", flag: "🇦🇺" },
-];
 
 const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px] lg:mb-1.5";
 /** Sem largura: quem usa decide (o seletor de DDI é estreito, o resto ocupa tudo). */
@@ -217,8 +209,9 @@ export function SignupForm({
   const date = pickedDate || today;
   const [time, setTime] = useState(availableTimes[0] ?? "20:00");
 
-  const [countryCode, setCountryCode] = useState("+55");
+  const [countryId, setCountryId] = useState("br");
   const [phone, setPhone] = useState("");
+  const countryCode = COUNTRIES.find((country) => country.id === countryId)?.code ?? "+55";
 
   const enabled = useMemo(() => {
     const byKey = new Map((formFields ?? []).map((f) => [f.key, f]));
@@ -390,16 +383,18 @@ export function SignupForm({
           <div className="flex gap-3">
             <select
               aria-label="Código do país"
-              value={countryCode}
+              value={countryId}
               onChange={(e) => {
-                setCountryCode(e.target.value);
-                setPhone((p) => maskPhone(p, e.target.value));
+                const nextCountryId = e.target.value;
+                const nextCountryCode = COUNTRIES.find((country) => country.id === nextCountryId)?.code ?? "+55";
+                setCountryId(nextCountryId);
+                setPhone((p) => maskPhone(p, nextCountryCode));
               }}
               className={`${capFieldBase} w-[108px] shrink-0 px-3 text-[12px] sm:text-[15px]`}
             >
               {COUNTRIES.map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.flag} {c.code}
+                <option key={c.id} value={c.id}>
+                  {c.flag} {c.code} — {c.name}
                 </option>
               ))}
             </select>
@@ -412,7 +407,7 @@ export function SignupForm({
               value={phone}
               onChange={(e) => setPhone(maskPhone(e.target.value, countryCode))}
               placeholder={FIELD_DEFAULTS.whatsapp.placeholder}
-              className={capInput}
+              className={`${capInput} min-w-0 flex-1`}
             />
           </div>
         </div>
