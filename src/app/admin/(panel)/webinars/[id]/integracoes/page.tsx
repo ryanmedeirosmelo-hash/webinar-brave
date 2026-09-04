@@ -3,6 +3,8 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { saveIntegrations } from "@/app/admin/actions";
 import { input, card, saveBtn } from "../_steps";
 import { Toggle, SectionTitle } from "../_fields";
+import { PublicLinkActions } from "@/components/PublicLinkActions";
+import { publicLeadOrigin } from "@/lib/public-links";
 import type { Webinar } from "@/types/db";
 
 export const dynamic = "force-dynamic";
@@ -38,17 +40,45 @@ export default async function StepIntegracoes({
   const { id } = await params;
   const { data: w } = await supabaseAdmin()
     .from("webinars")
-    .select("integrations")
+    .select("integrations, slug, type")
     .eq("id", id)
-    .single<Pick<Webinar, "integrations">>();
+    .single<Pick<Webinar, "integrations" | "slug" | "type">>();
   if (!w) notFound();
 
   const map = (w.integrations ?? {}) as Record<string, Cfg>;
+  const leadOrigin = publicLeadOrigin();
+  const publicLinks = [
+    {
+      name: "Sala de espera",
+      path: `/sala/${w.slug}`,
+      hint: "Mostra a contagem e abre a transmissão sozinha no horário configurado.",
+    },
+    {
+      name: "Entrar direto",
+      path: `/entrar/${w.slug}`,
+      hint: "Não pede cadastro: antes da aula leva à espera; durante, abre a transmissão.",
+    },
+    {
+      name: "Página de cadastro",
+      path: `/cadastro/${w.slug}`,
+      hint: "Formulário de inscrição estável, sem depender da configuração da sala.",
+    },
+    {
+      name: "Página de obrigado",
+      path: `/obrigado/${w.slug}`,
+      hint: "Página final própria deste webinar.",
+    },
+    {
+      name: "Página de captura",
+      path: `/captura/${w.slug}`,
+      hint: "URL própria para usar em campanhas e anúncios.",
+    },
+  ];
 
   return (
     <form action={saveIntegrations} className={`${card} max-w-4xl`}>
       <input type="hidden" name="webinar_id" value={id} />
-      <input type="hidden" name="__redirect" value="/admin" />
+      <input type="hidden" name="__redirect" value={`/admin/webinars/${id}/integracoes`} />
 
       <SectionTitle icon="grid" hint="Ligue e configure as integrações deste webinar.">
         Suas integrações
@@ -85,8 +115,39 @@ export default async function StepIntegracoes({
         })}
       </div>
 
+      {w.type === "unico" && (
+        <section className="mt-8 border-t border-slate-800 pt-6" aria-labelledby="public-links-title">
+          <h2 id="public-links-title" className="text-base font-semibold text-white">
+            Links públicos do webinar único
+          </h2>
+          <p className="mt-1 text-sm leading-6 text-slate-400">
+            Copie o link adequado para cada etapa da campanha. A entrada direta não cria
+            inscrição; as visualizações entram nas métricas como anônimas.
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {publicLinks.map((link) => (
+              <div key={link.path} className="rounded-xl border border-slate-800 bg-slate-950/35 p-4">
+                <p className="text-sm font-semibold text-slate-100">{link.name}</p>
+                <p className="mt-1 min-h-10 text-xs leading-5 text-slate-500">{link.hint}</p>
+                <code className="mt-3 block truncate rounded bg-slate-950 px-2 py-1.5 text-xs text-slate-300">
+                  {link.path}
+                </code>
+                <div className="mt-3">
+                  <PublicLinkActions
+                    path={link.path}
+                    pageName={link.name.toLowerCase()}
+                    origin={leadOrigin}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="mt-6 flex justify-end">
-        <button className={saveBtn}>Concluir ✓</button>
+        <button className={saveBtn}>Salvar integrações</button>
       </div>
     </form>
   );

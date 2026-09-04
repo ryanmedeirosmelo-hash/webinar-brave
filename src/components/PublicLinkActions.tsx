@@ -3,30 +3,40 @@
 import { useState } from "react";
 
 /** Ações para os links públicos que o painel gera a partir do slug. */
-export function PublicLinkActions({ path }: { path: string }) {
+export function PublicLinkActions({
+  path,
+  pageName = "página final",
+  origin,
+}: {
+  path: string;
+  pageName?: string;
+  /** Host público dos leads quando o painel usa um domínio separado. */
+  origin?: string | null;
+}) {
   const [copied, setCopied] = useState(false);
+  const href = origin ? new URL(path, origin).toString() : path;
 
   async function copyLink() {
-    const url = new URL(path, window.location.origin).toString();
+    const url = origin ? href : new URL(path, window.location.origin).toString();
 
     try {
       await navigator.clipboard.writeText(url);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 2_000);
     } catch {
-      window.prompt("Copie o link da página final:", url);
+      window.prompt(`Copie o link da ${pageName}:`, url);
     }
   }
 
   return (
     <div className="flex flex-wrap gap-2">
       <a
-        href={path}
+        href={href}
         target="_blank"
         rel="noreferrer"
         className="inline-flex items-center rounded-lg bg-[#cbad78] px-3 py-2 text-xs font-semibold text-[#111827] transition hover:bg-[#dcc28f]"
       >
-        Visualizar página final ↗
+        Visualizar {pageName} ↗
       </a>
       <button
         type="button"

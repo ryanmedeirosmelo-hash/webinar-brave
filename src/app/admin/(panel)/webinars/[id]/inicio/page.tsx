@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { updateWebinar } from "@/app/admin/actions";
 import { PublicLinkActions } from "@/components/PublicLinkActions";
+import { publicLeadOrigin } from "@/lib/public-links";
 import { input, label, card, saveBtn } from "../_steps";
 import type { Webinar } from "@/types/db";
 
@@ -19,6 +20,7 @@ export default async function StepInicio({
     .eq("id", id)
     .single<Webinar>();
   if (!w) notFound();
+  const leadOrigin = publicLeadOrigin();
 
   return (
     <form action={updateWebinar} className={`${card} max-w-3xl`}>
@@ -83,7 +85,11 @@ export default async function StepInicio({
             /obrigado/{w.slug}
           </code>
           <div className="mt-3">
-            <PublicLinkActions path={`/obrigado/${w.slug}`} />
+            <PublicLinkActions
+              path={`/obrigado/${w.slug}`}
+              pageName="página final"
+              origin={leadOrigin}
+            />
           </div>
         </div>
 
