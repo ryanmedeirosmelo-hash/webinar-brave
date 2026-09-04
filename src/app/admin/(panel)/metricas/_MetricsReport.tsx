@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   getAggregateRetention,
   getAllLives,
@@ -19,6 +19,35 @@ const card =
 
 function keyOf(l: { webinarId: string; sessionStart: string }) {
   return `${l.webinarId}|${l.sessionStart}`;
+}
+
+/** Evita rerender a cada poll quando o relatório retornou exatamente os mesmos dados. */
+function sameLives(current: LiveRow[], next: LiveRow[]) {
+  return (
+    current.length === next.length &&
+    current.every((l, index) => {
+      const n = next[index];
+      return (
+        n &&
+        l.webinarId === n.webinarId &&
+        l.webinarTitle === n.webinarTitle &&
+        l.slug === n.slug &&
+        l.sessionStart === n.sessionStart &&
+        l.invited === n.invited &&
+        l.invitedAttended === n.invitedAttended &&
+        l.registered === n.registered &&
+        l.registeredAttended === n.registeredAttended &&
+        l.anonPlays === n.anonPlays &&
+        l.entered === n.entered &&
+        l.reachedEnd === n.reachedEnd &&
+        l.watchingNow === n.watchingNow &&
+        l.isLive === n.isLive &&
+        l.peak === n.peak &&
+        l.peakAtSeconds === n.peakAtSeconds &&
+        l.purchases === n.purchases
+      );
+    })
+  );
 }
 
 function splitKey(k: string): [string, string] {
@@ -235,6 +264,8 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
   const [detail, setDetail] = useState<LiveDetail | null>(null);
   const [tab, setTab] = useState<DetailTab>("resumo");
   const [aggregateRetention, setAggregateRetention] = useState<AggregateRetention | null>(null);
+  const activeRetentionKey = useRef("");
+  const selectedIsLive = lives.some((l) => keyOf(l) === selected && l.isLive);
 
   // detalhe da live selecionada (com poll enquanto ela continua selecionada)
   useEffect(() => {
@@ -248,18 +279,25 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
         })
         .catch(() => {});
     load();
+    // Uma live encerrada não muda: reabrir o mesmo detalhe a cada 10 s faz a
+    // curva parecer instável, sem trazer informação nova.
+    if (!selectedIsLive) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const id = setInterval(load, POLL_MS);
     return () => {
       cancelled = true;
       clearInterval(id);
     };
-  }, [selected]);
+  }, [selected, selectedIsLive]);
 
   // poll da lista de lives (conta novas lives / atualiza números)
   useEffect(() => {
     const id = setInterval(() => {
       getAllLives()
-        .then((next) => setLives(next))
+        .then((next) => setLives((current) => (sameLives(current, next) ? current : next)))
         .catch(() => {});
     }, POLL_MS);
     return () => clearInterval(id);
@@ -269,30 +307,53 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
     () => filterLives(lives, period, webinarFilter, weekday, fromDate, toDate),
     [lives, period, webinarFilter, weekday, fromDate, toDate]
   );
+  // As lives escolhidas, sem os números que os polls mudam. Assim, atividade
+  // fora do intervalo não recria a curva de um período histórico.
+  const retentionRequestKey = filtered.map(keyOf).join("~");
   const retentionRequest = useMemo<LiveSessionKey[]>(
-    () => filtered.map(({ webinarId, sessionStart }) => ({ webinarId, sessionStart })),
-    [filtered]
+    () =>
+      retentionRequestKey
+        ? retentionRequestKey.split("~").map((key) => {
+            const [webinarId, sessionStart] = splitKey(key);
+            return { webinarId, sessionStart };
+          })
+        : [],
+    [retentionRequestKey]
   );
+  const hasLiveInFiltered = filtered.some((l) => l.isLive);
 
-  // Uma única curva ponderada por plays, com atualização junto da lista de lives.
+  // Live encerrada é estável: busca uma vez por filtro. Só a live em andamento
+  // atualiza a curva periodicamente, sem limpar o gráfico entre as respostas.
   useEffect(() => {
     if (retentionRequest.length === 0) {
+      activeRetentionKey.current = "";
       setAggregateRetention(null);
       return;
     }
     let cancelled = false;
-    setAggregateRetention(null);
-    getAggregateRetention(retentionRequest)
-      .then((next) => {
-        if (!cancelled) setAggregateRetention(next);
-      })
-      .catch(() => {
-        if (!cancelled) setAggregateRetention({ lives: 0, plays: 0, curve: [] });
-      });
+    const changedFilter = activeRetentionKey.current !== retentionRequestKey;
+    activeRetentionKey.current = retentionRequestKey;
+    const load = () =>
+      getAggregateRetention(retentionRequest)
+        .then((next) => {
+          if (!cancelled) setAggregateRetention(next);
+        })
+        .catch(() => {
+          if (!cancelled) setAggregateRetention({ lives: 0, plays: 0, curve: [] });
+        });
+    if (changedFilter) setAggregateRetention(null);
+    load();
+    if (!hasLiveInFiltered) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const id = setInterval(load, POLL_MS);
     return () => {
       cancelled = true;
+      clearInterval(id);
     };
-  }, [retentionRequest]);
+  }, [retentionRequest, retentionRequestKey, hasLiveInFiltered]);
 
   if (lives.length === 0) {
     return (
