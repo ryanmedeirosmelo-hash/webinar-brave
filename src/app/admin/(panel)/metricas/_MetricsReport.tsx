@@ -1,11 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
+  getAggregateRetention,
   getAllLives,
   getLiveDetail,
+  type AggregateRetention,
   type LiveRow,
   type LiveDetail,
+  type LiveSessionKey,
   type RetentionCurvePoint,
 } from "@/app/admin/actions";
 import { displayTitle } from "@/components/Brand";
@@ -73,13 +76,6 @@ const dayPartsFmt = new Intl.DateTimeFormat("en-US", {
   month: "2-digit",
   day: "2-digit",
 });
-const dayLabelFmt = new Intl.DateTimeFormat("pt-BR", {
-  timeZone: BRT,
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-});
 const hmFmt = new Intl.DateTimeFormat("pt-BR", {
   timeZone: BRT,
   hour: "2-digit",
@@ -101,11 +97,6 @@ function dayOf(iso: string): string {
       .map((part) => [part.type, part.value])
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-function dayLabel(day: string): string {
-  // Meio-dia UTC permanece no mesmo dia em Brasília; evita virar o dia anterior.
-  return dayLabelFmt.format(new Date(`${day}T12:00:00.000Z`)).replace(".", "");
 }
 
 /** Minuto do dia (0–1439) de um instante, em Brasília. */
@@ -147,7 +138,8 @@ function filterLives(
   period: Period,
   webinarId: string,
   weekday: WeekdayFilter,
-  sessionDate: string
+  fromDate: string,
+  toDate: string
 ): LiveRow[] {
   const cutoff =
     period === "all" ? 0 : Date.now() - Number(period) * 24 * 60 * 60 * 1000;
@@ -156,7 +148,8 @@ function filterLives(
       (webinarId === "all" || l.webinarId === webinarId) &&
       (cutoff === 0 || new Date(l.sessionStart).getTime() >= cutoff) &&
       (weekday === "all" || weekdayOf(l.sessionStart) === weekday) &&
-      (!sessionDate || dayOf(l.sessionStart) === sessionDate)
+      (!fromDate || dayOf(l.sessionStart) >= fromDate) &&
+      (!toDate || dayOf(l.sessionStart) <= toDate)
   );
 }
 
@@ -234,12 +227,14 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
   const [period, setPeriod] = useState<Period>("30");
   const [webinarFilter, setWebinarFilter] = useState<string>("all");
   const [weekday, setWeekday] = useState<WeekdayFilter>("all");
-  const [sessionDate, setSessionDate] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   const [selected, setSelected] = useState<string | null>(
     initialLives.length ? keyOf(initialLives[0]) : null
   );
   const [detail, setDetail] = useState<LiveDetail | null>(null);
   const [tab, setTab] = useState<DetailTab>("resumo");
+  const [aggregateRetention, setAggregateRetention] = useState<AggregateRetention | null>(null);
 
   // detalhe da live selecionada (com poll enquanto ela continua selecionada)
   useEffect(() => {
@@ -270,6 +265,35 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
     return () => clearInterval(id);
   }, []);
 
+  const filtered = useMemo(
+    () => filterLives(lives, period, webinarFilter, weekday, fromDate, toDate),
+    [lives, period, webinarFilter, weekday, fromDate, toDate]
+  );
+  const retentionRequest = useMemo<LiveSessionKey[]>(
+    () => filtered.map(({ webinarId, sessionStart }) => ({ webinarId, sessionStart })),
+    [filtered]
+  );
+
+  // Uma única curva ponderada por plays, com atualização junto da lista de lives.
+  useEffect(() => {
+    if (retentionRequest.length === 0) {
+      setAggregateRetention(null);
+      return;
+    }
+    let cancelled = false;
+    setAggregateRetention(null);
+    getAggregateRetention(retentionRequest)
+      .then((next) => {
+        if (!cancelled) setAggregateRetention(next);
+      })
+      .catch(() => {
+        if (!cancelled) setAggregateRetention({ lives: 0, plays: 0, curve: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [retentionRequest]);
+
   if (lives.length === 0) {
     return (
       <div className={`${card} text-center`}>
@@ -282,25 +306,33 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
     );
   }
 
-  const filtered = filterLives(lives, period, webinarFilter, weekday, sessionDate);
   const webinars = [...new Map(lives.map((l) => [l.webinarId, l])).values()];
-  const sessionDates = [...new Set(lives.map((l) => dayOf(l.sessionStart)))].sort().reverse();
+  const liveDates = [...new Set(lives.map((l) => dayOf(l.sessionStart)))].sort();
+  const firstLiveDate = liveDates[0] ?? "";
+  const lastLiveDate = liveDates[liveDates.length - 1] ?? "";
 
   // troca de filtro: garante que a live selecionada continua visível
-  const applyFilter = (p: Period, wf: string, wd: WeekdayFilter, date: string) => {
+  const applyFilter = (
+    p: Period,
+    wf: string,
+    wd: WeekdayFilter,
+    nextFromDate: string,
+    nextToDate: string
+  ) => {
     setPeriod(p);
     setWebinarFilter(wf);
     setWeekday(wd);
-    setSessionDate(date);
-    const f = filterLives(lives, p, wf, wd, date);
+    setFromDate(nextFromDate);
+    setToDate(nextToDate);
+    const f = filterLives(lives, p, wf, wd, nextFromDate, nextToDate);
     if (!f.some((l) => keyOf(l) === selected)) {
       setSelected(f.length ? keyOf(f[0]) : null);
     }
   };
 
   // Comparativo por dia da semana — ignora só o filtro de dia da semana (senão só sobra
-  // uma linha), mas respeita período, webinar e a data específica escolhida.
-  const byWeekdayBase = filterLives(lives, period, webinarFilter, "all", sessionDate);
+  // uma linha), mas respeita período, webinar e o intervalo escolhido.
+  const byWeekdayBase = filterLives(lives, period, webinarFilter, "all", fromDate, toDate);
   const weekdaysPresent = [...new Set(byWeekdayBase.map((l) => weekdayOf(l.sessionStart)))].sort(
     (a, b) => a - b
   );
@@ -320,12 +352,12 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filtros: período + data + dia da semana + webinar */}
+      {/* Filtros: atalhos de período + intervalo de datas + dia da semana + webinar */}
       <div className="flex flex-wrap items-center gap-2">
         {PERIODS.map((p) => (
           <button
             key={p.key}
-            onClick={() => applyFilter(p.key, webinarFilter, weekday, "")}
+            onClick={() => applyFilter(p.key, webinarFilter, weekday, "", "")}
             className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
               period === p.key
                 ? "bg-[#cbad78]/15 text-[#e3cfa0] ring-1 ring-[#cbad78]/40"
@@ -345,7 +377,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
             {(["all", ...weekdaysPresent] as WeekdayFilter[]).map((wd) => (
               <button
                 key={String(wd)}
-                onClick={() => applyFilter(period, webinarFilter, wd, sessionDate)}
+                onClick={() => applyFilter(period, webinarFilter, wd, fromDate, toDate)}
                 className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
                   weekday === wd
                     ? "bg-[#cbad78]/15 text-[#e3cfa0] ring-1 ring-[#cbad78]/40"
@@ -358,33 +390,66 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 border-l border-slate-800 pl-2">
+        <div className="flex flex-wrap items-center gap-1.5 border-l border-slate-800 pl-2">
           <label
-            htmlFor="metrics-session-date"
+            htmlFor="metrics-from-date"
             className="text-[10px] font-semibold uppercase tracking-widest text-slate-600"
           >
-            data
+            período
           </label>
-          <select
-            id="metrics-session-date"
-            value={sessionDate}
-            onChange={(e) =>
-              applyFilter(e.target.value ? "all" : period, webinarFilter, weekday, e.target.value)
-            }
+          <input
+            id="metrics-from-date"
+            type="date"
+            value={fromDate}
+            min={firstLiveDate}
+            max={toDate || lastLiveDate}
+            onChange={(e) => {
+              const nextFromDate = e.target.value;
+              applyFilter(
+                "all",
+                webinarFilter,
+                weekday,
+                nextFromDate,
+                toDate && toDate < nextFromDate ? nextFromDate : toDate
+              );
+            }}
             className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-300 outline-none focus:border-[#cbad78]/60"
-          >
-            <option value="">Todas as datas</option>
-            {sessionDates.map((date) => (
-              <option key={date} value={date}>
-                {dayLabel(date)}
-              </option>
-            ))}
-          </select>
+            aria-label="Data inicial"
+          />
+          <span className="text-xs text-slate-600">até</span>
+          <input
+            id="metrics-to-date"
+            type="date"
+            value={toDate}
+            min={fromDate || firstLiveDate}
+            max={lastLiveDate}
+            onChange={(e) => {
+              const nextToDate = e.target.value;
+              applyFilter(
+                "all",
+                webinarFilter,
+                weekday,
+                fromDate && nextToDate && fromDate > nextToDate ? nextToDate : fromDate,
+                nextToDate
+              );
+            }}
+            className="rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-sm text-slate-300 outline-none focus:border-[#cbad78]/60"
+            aria-label="Data final"
+          />
+          {(fromDate || toDate) && (
+            <button
+              type="button"
+              onClick={() => applyFilter("all", webinarFilter, weekday, "", "")}
+              className="px-1 text-xs text-slate-500 transition hover:text-slate-200"
+            >
+              limpar
+            </button>
+          )}
         </div>
 
         <select
           value={webinarFilter}
-          onChange={(e) => applyFilter(period, e.target.value, weekday, sessionDate)}
+          onChange={(e) => applyFilter(period, e.target.value, weekday, fromDate, toDate)}
           className="ml-auto rounded-lg border border-slate-800 bg-slate-900 px-3 py-1.5 text-sm text-slate-300 outline-none focus:border-[#cbad78]/60"
         >
           <option value="all">Todos os webinars</option>
@@ -403,16 +468,13 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           { label: "Plays únicos (soma)", value: String(totals.plays) },
           {
             label: "Tx de comparecimento",
-            value: totals.invitedRate !== null ? `${totals.invitedRate}%` : "—",
+            value: totals.attendance !== null ? `${totals.attendance}%` : "—",
             sub:
-              totals.invitedRate !== null
-                ? `${totals.invitedAttended} de ${totals.invitedMeasured} convidados` +
-                  (totals.invited > totals.invitedMeasured
-                    ? ` (+${totals.invited - totals.invitedMeasured} sem cadastro)`
-                    : "")
-                : totals.invited > 0
-                  ? `${totals.invited} convidados · sem cadastro`
-                  : "sem disparo no dia",
+              totals.attendance !== null
+                ? `${totals.registeredAttended} de ${totals.registered} inscritos entraram`
+                : totals.plays > 0
+                  ? "entrada livre ou sem inscritos no período"
+                  : "sem inscritos no período",
           },
           {
             label: "Horário de pico",
@@ -438,6 +500,46 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
         ))}
       </div>
 
+      {/* Retenção de TODAS as lives que permanecem depois dos filtros atuais. */}
+      {filtered.length > 0 && (
+        <div className={card}>
+          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                📈 Retenção do período
+              </p>
+              <p className="mt-1 text-sm text-slate-300">
+                Todas as lives do filtro, em uma curva ponderada pelos plays.
+              </p>
+            </div>
+            <p className="text-xs tabular-nums text-slate-500">
+              {aggregateRetention
+                ? `${aggregateRetention.lives} ${aggregateRetention.lives === 1 ? "live" : "lives"} · ${aggregateRetention.plays} plays`
+                : "calculando…"}
+            </p>
+          </div>
+
+          {aggregateRetention === null ? (
+            <div className="flex h-52 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/50 text-sm text-slate-500">
+              Calculando a curva de retenção…
+            </div>
+          ) : aggregateRetention.curve.length > 1 ? (
+            <div className="rounded-xl border border-slate-800 bg-slate-950/50 p-3">
+              <RetentionChart points={aggregateRetention.curve} pitchAt={null} aggregate />
+            </div>
+          ) : (
+            <div className="flex h-52 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/50 px-5 text-center text-sm text-slate-500">
+              Ainda não há minutos suficientes de presença para desenhar a curva neste período.
+            </div>
+          )}
+
+          <p className="mt-2 text-xs text-slate-500">
+            A porcentagem de cada minuto usa os plays das lives que alcançaram aquele minuto. Isso
+            evita que uma live curta reduza artificialmente a retenção das lives mais longas.
+          </p>
+        </div>
+      )}
+
       {/* Comparativo por dia da semana (segunda x quinta) */}
       {weekdaysPresent.length > 1 && (
         <div className="rounded-2xl border border-slate-800/80 bg-slate-900/40">
@@ -457,7 +559,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
                   <th className="px-2 py-1.5 text-right font-semibold">Lives</th>
                   <th className="px-2 py-1.5 text-right font-semibold">Convidados</th>
                   <th className="px-2 py-1.5 text-right font-semibold">Vieram</th>
-                  <th className="px-2 py-1.5 text-right font-semibold">Comparecimento</th>
+                  <th className="px-2 py-1.5 text-right font-semibold">Comp. disparo</th>
                   <th className="px-2 py-1.5 text-right font-semibold">Inscritos</th>
                   <th className="px-2 py-1.5 text-right font-semibold">Plays</th>
                   <th className="px-2 py-1.5 text-right font-semibold">Horário de pico</th>
@@ -474,7 +576,7 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
                     <tr
                       key={g.label}
                       onClick={() =>
-                        applyFilter(period, webinarFilter, g.weekday, sessionDate)
+                        applyFilter(period, webinarFilter, g.weekday, fromDate, toDate)
                       }
                       className={`cursor-pointer border-t border-slate-800/80 transition ${
                         active ? "bg-[#cbad78]/10" : "hover:bg-slate-800/40"
@@ -510,9 +612,13 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
                         ) : (
                           <span
                             className="text-slate-500"
-                            title="Aula de entrada livre: sem cadastro não há telefone pra cruzar com o disparo, então não dá pra saber quem dos convidados veio."
+                            title={
+                              g.invited > 0
+                                ? "Aula de entrada livre: sem cadastro não há telefone pra cruzar com o disparo, então não dá pra saber quem dos convidados veio."
+                                : "Não houve disparo de WhatsApp registrado no CRM para as lives deste recorte."
+                            }
                           >
-                            — sem cadastro
+                            {g.invited > 0 ? "— sem cadastro" : "— sem disparo"}
                           </span>
                         )}
                       </td>
@@ -521,6 +627,9 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
                         title={`${g.registeredAttended} dos ${g.registered} inscritos entraram na sala`}
                       >
                         {g.registered}
+                        {g.attendance !== null && (
+                          <span className="ml-1 text-[11px] text-[#e3cfa0]">{g.attendance}%</span>
+                        )}
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums text-white whitespace-nowrap">
                         {g.plays}
@@ -563,9 +672,10 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           </div>
           <p className="px-4 pb-3 text-[11px] text-slate-500">
             Convidados = quem recebeu disparo de WhatsApp no dia da aula (lido do CRM).
-            Comparecimento = desses convidados, quantos entraram na sala — cruzando o telefone do
-            disparo com o do cadastro. Aula de entrada livre não tem cadastro, então dá pra saber
-            quantos foram convidados mas não quantos vieram. Horário de pico = mediana do
+            Comp. disparo = desses convidados, quantos entraram na sala — cruzando o telefone do
+            disparo com o do cadastro. Em Inscritos, o percentual dourado é a taxa de
+            comparecimento da própria live. Aula de entrada livre não tem cadastro, então dá pra
+            saber quantos foram convidados mas não quantos vieram. Horário de pico = mediana do
             horário (Brasília) em que a live bate o máximo de simultâneos; entre parênteses, o
             minuto da aula. Pico = mediana por live (máx = maior pico registrado).
           </p>
@@ -681,15 +791,18 @@ function StatTile({
   );
 }
 
-/** Curva de retenção estilo VTurb: % dos plays presentes em cada minuto da live. */
+/** Curva de retenção: % de plays presentes em cada minuto. */
 function RetentionChart({
   points,
   pitchAt,
+  aggregate = false,
 }: {
-  points: RetentionCurvePoint[];
+  points: Array<RetentionCurvePoint & { base?: number; lives?: number }>;
   pitchAt: number | null;
+  aggregate?: boolean;
 }) {
   const [hover, setHover] = useState<number | null>(null);
+  const fillId = `ret-fill-${useId().replace(/:/g, "")}`;
 
   const W = 640;
   const H = 200;
@@ -732,7 +845,9 @@ function RetentionChart({
   };
 
   const hp = hover !== null ? points[hover] : null;
-  const tooltipFlip = hp !== null && x(hp.atSeconds) > W - 150;
+  const tooltipWidth = aggregate ? 154 : 130;
+  const tooltipHeight = aggregate ? 47 : 34;
+  const tooltipFlip = hp !== null && x(hp.atSeconds) > W - tooltipWidth - 20;
 
   return (
     <svg
@@ -742,7 +857,7 @@ function RetentionChart({
       onMouseLeave={() => setHover(null)}
     >
       <defs>
-        <linearGradient id="ret-fill" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#cbad78" stopOpacity="0.4" />
           <stop offset="100%" stopColor="#cbad78" stopOpacity="0.02" />
         </linearGradient>
@@ -765,7 +880,7 @@ function RetentionChart({
         </text>
       ))}
 
-      <path d={area} fill="url(#ret-fill)" />
+      <path d={area} fill={`url(#${fillId})`} />
       <path d={line} fill="none" stroke="#cbad78" strokeWidth="2" strokeLinejoin="round" />
 
       {/* momento do pitch */}
@@ -816,10 +931,17 @@ function RetentionChart({
           />
           <g
             transform={`translate(${
-              tooltipFlip ? x(hp.atSeconds) - 138 : x(hp.atSeconds) + 8
+              tooltipFlip ? x(hp.atSeconds) - tooltipWidth - 8 : x(hp.atSeconds) + 8
             }, ${padT + 2})`}
           >
-            <rect width="130" height="34" rx="6" fill="#0f172a" stroke="#334155" strokeWidth="1" />
+            <rect
+              width={tooltipWidth}
+              height={tooltipHeight}
+              rx="6"
+              fill="#0f172a"
+              stroke="#334155"
+              strokeWidth="1"
+            />
             <text x="8" y="14" fontSize="9.5" fontWeight="700" fill="#e2e8f0">
               {fmtPos(hp.atSeconds)} de live
             </text>
@@ -827,6 +949,11 @@ function RetentionChart({
               {hp.count} {hp.count === 1 ? "pessoa" : "pessoas"}
               {hp.pct !== null ? ` · ${hp.pct}%` : ""}
             </text>
+            {aggregate && (
+              <text x="8" y="40" fontSize="9" fill="#94a3b8">
+                {hp.lives} {hp.lives === 1 ? "live" : "lives"} · base {hp.base} plays
+              </text>
+            )}
           </g>
         </g>
       )}

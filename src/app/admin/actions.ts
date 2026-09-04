@@ -716,6 +716,24 @@ export type RetentionCurvePoint = {
   pct: number | null; // % sobre os plays únicos
 };
 
+/** Identifica uma live específica — um webinar pode ter várias sessões. */
+export type LiveSessionKey = {
+  webinarId: string;
+  sessionStart: string;
+};
+
+/** Retenção consolidada: a base muda quando uma live não alcança mais aquele minuto. */
+export type AggregateRetentionCurvePoint = RetentionCurvePoint & {
+  base: number; // plays das lives que possuem este minuto
+  lives: number; // lives que possuem este minuto
+};
+
+export type AggregateRetention = {
+  lives: number;
+  plays: number;
+  curve: AggregateRetentionCurvePoint[];
+};
+
 /** Um espectador de uma live (inscrito ou anônimo), com local e aparelho. */
 export type LiveAttendee = {
   name: string | null; // nome do inscrito (null = anônimo, entrou sem formulário)
@@ -1054,6 +1072,142 @@ export async function getAllLives(): Promise<LiveRow[]> {
 
   rows.sort((a, b) => b.sessionStart.localeCompare(a.sessionStart));
   return rows;
+}
+
+/**
+ * Curva consolidada das lives escolhidas no relatório.
+ *
+ * A porcentagem de cada minuto usa apenas as lives que chegaram àquele ponto.
+ * Assim, uma aula curta não derruba artificialmente a retenção das aulas longas
+ * para zero depois de terminar.
+ */
+export async function getAggregateRetention(
+  requestedSessions: LiveSessionKey[]
+): Promise<AggregateRetention> {
+  const requested = new Map<string, LiveSessionKey>();
+  for (const item of requestedSessions) {
+    const sessionStart = isoKey(item?.sessionStart);
+    if (!item?.webinarId || !sessionStart) continue;
+    requested.set(`${item.webinarId}|${sessionStart}`, {
+      webinarId: item.webinarId,
+      sessionStart,
+    });
+  }
+
+  if (requested.size === 0) return { lives: 0, plays: 0, curve: [] };
+
+  const supabase = supabaseAdmin();
+  const webinarIds = [...new Set([...requested.values()].map((item) => item.webinarId))];
+  const withMinutes = await hasMinutesColumn(supabase);
+  const sessionCols =
+    "webinar_id, session_start, first_seen_at, last_seen_at" + (withMinutes ? ", minutes" : "");
+
+  type WebinarDuration = { id: string; duration_seconds: number };
+  type Row = {
+    webinar_id: string;
+    session_start: string | null;
+    first_seen_at: string;
+    last_seen_at: string;
+    minutes?: number[] | null;
+  };
+
+  const [{ data: webinars }, sessionRows] = await Promise.all([
+    supabase
+      .from("webinars")
+      .select("id, duration_seconds")
+      .in("id", webinarIds)
+      .returns<WebinarDuration[]>(),
+    fetchAll<Row>((from, to) =>
+      supabase
+        .from("watch_sessions")
+        .select(sessionCols)
+        .in("webinar_id", webinarIds)
+        .not("session_start", "is", null)
+        .order("first_seen_at", { ascending: true })
+        .range(from, to)
+    ),
+  ]);
+
+  const durations = new Map(
+    (webinars ?? []).map((webinar) => [webinar.id, webinar.duration_seconds ?? 0])
+  );
+  const rowsByLive = new Map<string, Row[]>();
+  for (const row of sessionRows) {
+    const sessionStart = isoKey(row.session_start);
+    if (!sessionStart) continue;
+    const key = `${row.webinar_id}|${sessionStart}`;
+    if (!requested.has(key)) continue;
+    const duration = durations.get(row.webinar_id) ?? 0;
+    if (!withinLive(row.first_seen_at, sessionStart, duration)) continue;
+    const rows = rowsByLive.get(key);
+    if (rows) rows.push(row);
+    else rowsByLive.set(key, [row]);
+  }
+
+  const nowMs = Date.now();
+  const sources: Array<{ counts: number[]; lastMinute: number; entered: number }> = [];
+  for (const [key, item] of requested) {
+    const rows = rowsByLive.get(key) ?? [];
+    if (rows.length === 0) continue;
+    const startMs = new Date(item.sessionStart).getTime();
+    if (Number.isNaN(startMs)) continue;
+    const lastMinute = lastMinuteOf(startMs, durations.get(item.webinarId) ?? 0, nowMs);
+    sources.push({
+      counts: minuteCounts(rows.map(presenceOf), startMs, lastMinute),
+      lastMinute,
+      entered: rows.length,
+    });
+  }
+
+  const plays = sources.reduce((total, source) => total + source.entered, 0);
+  const maxMinute = Math.max(0, ...sources.map((source) => source.lastMinute));
+  const stepMinutes = maxMinute > 120 ? 2 : 1;
+  const curve: AggregateRetentionCurvePoint[] = [];
+
+  for (let minute = 0; minute <= maxMinute; minute += stepMinutes) {
+    let count = 0;
+    let base = 0;
+    let lives = 0;
+    for (const source of sources) {
+      if (source.lastMinute < minute) continue;
+      count += source.counts[minute] ?? 0;
+      base += source.entered;
+      lives++;
+    }
+    if (base > 0) {
+      curve.push({
+        atSeconds: minute * 60,
+        count,
+        base,
+        lives,
+        pct: Math.round((count / base) * 100),
+      });
+    }
+  }
+
+  const last = curve[curve.length - 1];
+  if (last && last.atSeconds !== maxMinute * 60) {
+    let count = 0;
+    let base = 0;
+    let lives = 0;
+    for (const source of sources) {
+      if (source.lastMinute < maxMinute) continue;
+      count += source.counts[maxMinute] ?? 0;
+      base += source.entered;
+      lives++;
+    }
+    if (base > 0) {
+      curve.push({
+        atSeconds: maxMinute * 60,
+        count,
+        base,
+        lives,
+        pct: Math.round((count / base) * 100),
+      });
+    }
+  }
+
+  return { lives: sources.length, plays, curve };
 }
 
 /** Detalhe completo de UMA live (espectadores + local + aparelho). */
