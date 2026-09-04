@@ -30,10 +30,10 @@ const FIELD_DEFAULTS: Record<FormField["key"], { label: string; placeholder: str
   whatsapp: { label: "WhatsApp", placeholder: "Seu telefone" },
 };
 
-const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px] lg:mb-1.5";
+const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[14px] lg:mb-1.5";
 /** Sem largura: quem usa decide (o seletor de DDI é estreito, o resto ocupa tudo). */
 const capFieldBase =
-  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-3 text-[12px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:py-[15px] sm:text-[16px] lg:py-3.5";
+  "rounded-[11px] border border-[color:var(--cap-line)] bg-white px-4 py-3 text-[13px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-focus)] focus:ring-4 focus:ring-[color:var(--cap-focus-ring)] sm:py-[15px] sm:text-[15px] lg:py-3.5";
 const capInput = `w-full ${capFieldBase}`;
 
 /** "13:30" → "13h30" (formato do print). */
@@ -254,7 +254,7 @@ export function SignupForm({
           <input type="hidden" name="date" value={slot?.date ?? ""} />
           <input type="hidden" name="time" value={slot?.time ?? ""} />
 
-          <div className="relative flex items-center gap-3 rounded-[12px] border-2 border-[color:var(--cap-ink)] bg-white px-4 py-2.5 sm:py-3 lg:py-2.5">
+          <div className="relative flex items-center gap-3 rounded-[12px] border border-[color:var(--cap-focus)] bg-white px-4 py-2.5 ring-4 ring-[color:var(--cap-focus-ring)] sm:py-3 lg:py-2.5">
             <span className="text-[color:var(--cap-ink)]">
               <CalendarIcon />
             </span>
@@ -423,7 +423,7 @@ export function SignupForm({
         type="submit"
         disabled={pending || (useSlots && mounted && slots.length === 0)}
         style={{ background: buttonColor, color: buttonTextColor }}
-        className="w-full rounded-[10px] px-4 py-3.5 text-[13px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[17px] lg:py-4"
+        className="w-full rounded-[12px] px-4 py-3.5 text-[14px] font-extrabold tracking-[-0.015em] shadow-[0_12px_20px_-10px_rgba(216,76,7,0.7)] transition hover:-translate-y-px hover:brightness-[0.96] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--cap-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[16px] lg:py-4"
       >
         {pending ? "Confirmando…" : buttonLabel}
       </button>

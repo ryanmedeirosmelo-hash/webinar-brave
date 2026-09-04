@@ -153,20 +153,61 @@ body:has(.hw-theme[data-mode="dark"]) {
   }
 }
 
-/* ===== Tema "captura" (landing de inscrição: card branco sobre preto) =====
-   Layout aprovado da página do lead antes da aula. O fundo do site é escuro
-   (admin); aqui o preto é chapado, sem o gradiente sutil do resto. */
+/* ===== Tema "captura" (landing de inscrição: sala clara em campo verde) ===== */
 .cap-theme {
-  --cap-ink: #14171a; /* texto principal do card */
-  --cap-muted: #4b5563; /* parágrafo */
-  --cap-line: #d9dee5; /* borda dos inputs */
-  --cap-placeholder: #9aa3ad;
-  --cap-live: #16a34a; /* "começa em X minutos" */
+  --cap-ink: #101a2e;
+  --cap-muted: #506078;
+  --cap-surface: #fffefd;
+  --cap-line: #d8e4dc;
+  --cap-placeholder: #8b9a91;
+  --cap-focus: #169b55;
+  --cap-focus-ring: rgba(22, 155, 85, 0.13);
+  --cap-live: #109d52;
+  --cap-rule: #dceadf;
+  --cap-progress-track: #deebe1;
   font-family: var(--font-dm), var(--font-geist-sans), Arial, sans-serif;
-  background-color: #000000;
+  background-color: #0aa94f;
+  background-image:
+    radial-gradient(46rem 36rem at -8% 110%, rgba(112, 255, 151, 0.3), transparent 64%),
+    radial-gradient(38rem 34rem at 108% -12%, rgba(0, 86, 42, 0.31), transparent 62%),
+    linear-gradient(135deg, #13c25b 0%, #0aaa4d 52%, #078d42 100%);
 }
 html:has(.cap-theme),
 body:has(.cap-theme) {
-  background: #000000;
+  background: #0aa94f;
   background-image: none;
+}
+.cap-shell {
+  border: 1px solid rgba(255, 255, 255, 0.68);
+}
+.cap-form-panel {
+  background: #f4fbf6;
+  border: 1px solid #d9eadc;
+}
+.cap-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #0d8b47;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.cap-kicker span {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: #f15a24;
+  box-shadow: 0 0 0 4px rgba(241, 90, 36, 0.14);
+}
+.cap-image-panel::after {
+  position: absolute;
+  inset: auto 1.5rem 1.5rem auto;
+  width: 3.25rem;
+  height: 3.25rem;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 9999px;
+  content: "";
 }
