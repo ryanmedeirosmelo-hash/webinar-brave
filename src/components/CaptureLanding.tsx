@@ -20,10 +20,10 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
     <div className="cap-theme min-h-full py-3 sm:py-7 lg:py-8">
       <div className="mx-auto w-full max-w-[1320px] px-3 sm:px-5">
         <div className="cap-shell overflow-hidden rounded-[28px] bg-[color:var(--cap-surface)] shadow-[0_32px_80px_-34px_rgba(2,77,35,0.72)] sm:rounded-[34px]">
-          <div className={`grid ${image ? "lg:grid-cols-[minmax(0,1.24fr)_minmax(360px,0.76fr)]" : ""}`}>
+          <div className={`grid ${image ? "lg:grid-cols-[minmax(0,1.32fr)_minmax(320px,0.68fr)]" : ""}`}>
             {/* ---- Conteúdo e inscrição ---- */}
-            <div className="min-w-0 px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-9">
-              <div className="max-w-[680px]">
+            <div className="min-w-0 px-5 py-5 sm:px-7 sm:py-7 lg:px-8 lg:py-8">
+              <div className="max-w-[760px]">
                 {webinar.logo_url && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={webinar.logo_url} alt="" className="mb-4 h-9 w-auto max-w-[200px] object-contain sm:mb-5" />
@@ -34,21 +34,21 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                   Inscrição gratuita
                 </p>
 
-                <h1 className="mt-3 font-display text-[29px] font-extrabold leading-[1.1] tracking-[-0.045em] text-[color:var(--cap-ink)] sm:mt-4 sm:text-[38px] lg:text-[41px]">
+                <h1 className="mt-3 font-display text-[27px] font-extrabold leading-[1.12] tracking-[-0.045em] text-[color:var(--cap-ink)] sm:text-[33px] lg:text-[34px]">
                   {richText(heading)}
                 </h1>
 
                 {body && (
-                  <div className="mt-3 space-y-2 sm:mt-4 sm:space-y-2.5">
+                  <div className="mt-3 space-y-2 sm:space-y-2">
                     {paragraphs(body).map((p, i) => (
-                      <p key={i} className="text-[14px] leading-[1.52] text-[color:var(--cap-muted)] sm:text-[16px] sm:leading-[1.55]">
+                      <p key={i} className="text-[14px] leading-[1.5] text-[color:var(--cap-muted)] sm:text-[15px] sm:leading-[1.52]">
                         {richText(p)}
                       </p>
                     ))}
                   </div>
                 )}
 
-                <div className="cap-form-panel mt-5 rounded-[18px] p-4 sm:mt-6 sm:rounded-[20px] sm:p-5">
+                <div className="cap-form-panel mt-4 rounded-[18px] p-4 sm:mt-5 sm:rounded-[20px] sm:p-5">
                   <p className="mb-3 text-[13px] font-bold text-[color:var(--cap-ink)] sm:mb-4 sm:text-[14px]">
                     Escolha seu horário e reserve sua vaga
                   </p>
