@@ -17,16 +17,16 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
   const progress = Math.min(100, Math.max(0, webinar.progress_start ?? 0));
 
   return (
-    <div className="cap-theme min-h-full py-4 sm:py-10 lg:py-12">
-      <div className="mx-auto w-full max-w-[1240px] px-3 sm:px-5">
+    <div className="cap-theme min-h-full py-3 sm:py-7 lg:py-8">
+      <div className="mx-auto w-full max-w-[1320px] px-3 sm:px-5">
         <div className="cap-shell overflow-hidden rounded-[28px] bg-[color:var(--cap-surface)] shadow-[0_32px_80px_-34px_rgba(2,77,35,0.72)] sm:rounded-[34px]">
-          <div className={`grid ${image ? "lg:grid-cols-[minmax(0,1.12fr)_minmax(330px,0.88fr)]" : ""}`}>
+          <div className={`grid ${image ? "lg:grid-cols-[minmax(0,1.24fr)_minmax(360px,0.76fr)]" : ""}`}>
             {/* ---- Conteúdo e inscrição ---- */}
-            <div className="min-w-0 px-5 py-7 sm:px-10 sm:py-11 lg:px-12 lg:py-12">
-              <div className="max-w-[620px]">
+            <div className="min-w-0 px-5 py-6 sm:px-8 sm:py-8 lg:px-10 lg:py-9">
+              <div className="max-w-[680px]">
                 {webinar.logo_url && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={webinar.logo_url} alt="" className="mb-6 h-10 w-auto max-w-[220px] object-contain sm:mb-8" />
+                  <img src={webinar.logo_url} alt="" className="mb-4 h-9 w-auto max-w-[200px] object-contain sm:mb-5" />
                 )}
 
                 <p className="cap-kicker">
@@ -34,22 +34,22 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                   Inscrição gratuita
                 </p>
 
-                <h1 className="mt-4 font-display text-[30px] font-extrabold leading-[1.08] tracking-[-0.045em] text-[color:var(--cap-ink)] sm:mt-5 sm:text-[45px] lg:text-[48px]">
+                <h1 className="mt-3 font-display text-[29px] font-extrabold leading-[1.1] tracking-[-0.045em] text-[color:var(--cap-ink)] sm:mt-4 sm:text-[38px] lg:text-[41px]">
                   {richText(heading)}
                 </h1>
 
                 {body && (
-                  <div className="mt-4 space-y-2.5 sm:mt-6 sm:space-y-3">
+                  <div className="mt-3 space-y-2 sm:mt-4 sm:space-y-2.5">
                     {paragraphs(body).map((p, i) => (
-                      <p key={i} className="text-[15px] leading-[1.55] text-[color:var(--cap-muted)] sm:text-[17px] sm:leading-[1.6]">
+                      <p key={i} className="text-[14px] leading-[1.52] text-[color:var(--cap-muted)] sm:text-[16px] sm:leading-[1.55]">
                         {richText(p)}
                       </p>
                     ))}
                   </div>
                 )}
 
-                <div className="cap-form-panel mt-7 rounded-[20px] p-4 sm:mt-8 sm:rounded-[22px] sm:p-6">
-                  <p className="mb-4 text-[13px] font-bold text-[color:var(--cap-ink)] sm:mb-5 sm:text-[15px]">
+                <div className="cap-form-panel mt-5 rounded-[18px] p-4 sm:mt-6 sm:rounded-[20px] sm:p-5">
+                  <p className="mb-3 text-[13px] font-bold text-[color:var(--cap-ink)] sm:mb-4 sm:text-[14px]">
                     Escolha seu horário e reserve sua vaga
                   </p>
                   <SignupForm
