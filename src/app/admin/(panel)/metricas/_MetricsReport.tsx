@@ -523,9 +523,14 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
       </div>
 
       {/* Resumo do período (com o filtro de dia aplicado) */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
         {[
           { label: "Lives no período", value: String(totals.lives) },
+          {
+            label: "Inscritos (soma)",
+            value: String(totals.registered),
+            sub: "cadastros nas lives do período",
+          },
           { label: "Plays únicos (soma)", value: String(totals.plays) },
           {
             label: "Tx de comparecimento",
