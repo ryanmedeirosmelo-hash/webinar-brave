@@ -211,3 +211,14 @@ body:has(.cap-theme) {
   border-radius: 9999px;
   content: "";
 }
+
+@media (max-width: 639px) {
+  .cap-shell {
+    border-right: 0;
+    border-left: 0;
+  }
+
+  .cap-image-panel::after {
+    display: none;
+  }
+}

@@ -17,12 +17,12 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
   const progress = Math.min(100, Math.max(0, webinar.progress_start ?? 0));
 
   return (
-    <div className="cap-theme min-h-full py-3 sm:py-7 lg:py-8">
-      <div className="mx-auto w-full max-w-[1320px] px-3 sm:px-5">
-        <div className="cap-shell overflow-hidden rounded-[28px] bg-[color:var(--cap-surface)] shadow-[0_32px_80px_-34px_rgba(2,77,35,0.72)] sm:rounded-[34px]">
+    <div className="cap-theme min-h-[100dvh] py-0 sm:py-7 lg:py-8">
+      <div className="mx-auto w-full max-w-[1320px] px-0 sm:px-5">
+        <div className="cap-shell min-h-[100dvh] overflow-hidden rounded-none bg-[color:var(--cap-surface)] shadow-[0_32px_80px_-34px_rgba(2,77,35,0.72)] sm:min-h-0 sm:rounded-[34px]">
           <div className={`grid ${image ? "lg:grid-cols-[minmax(0,1.32fr)_minmax(320px,0.68fr)]" : ""}`}>
             {/* ---- Conteúdo e inscrição ---- */}
-            <div className="min-w-0 px-5 py-5 sm:px-7 sm:py-7 lg:px-8 lg:py-8">
+            <div className="min-w-0 px-5 py-6 sm:px-7 sm:py-7 lg:px-8 lg:py-8">
               <div className="max-w-[760px]">
                 {webinar.logo_url && (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -34,22 +34,22 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                   Inscrição gratuita
                 </p>
 
-                <h1 className="mt-3 font-display text-[27px] font-extrabold leading-[1.12] tracking-[-0.045em] text-[color:var(--cap-ink)] sm:text-[33px] lg:text-[34px]">
+                <h1 className="mt-3 font-display text-[29px] font-extrabold leading-[1.08] tracking-[-0.045em] text-[color:var(--cap-ink)] sm:text-[33px] sm:leading-[1.12] lg:text-[34px]">
                   {richText(heading)}
                 </h1>
 
                 {body && (
-                  <div className="mt-3 space-y-2 sm:space-y-2">
+                  <div className="mt-3 space-y-2.5 sm:space-y-2">
                     {paragraphs(body).map((p, i) => (
-                      <p key={i} className="text-[14px] leading-[1.5] text-[color:var(--cap-muted)] sm:text-[15px] sm:leading-[1.52]">
+                      <p key={i} className="text-[15px] leading-[1.5] text-[color:var(--cap-muted)] sm:text-[15px] sm:leading-[1.52]">
                         {richText(p)}
                       </p>
                     ))}
                   </div>
                 )}
 
-                <div className="cap-form-panel mt-4 rounded-[18px] p-4 sm:mt-5 sm:rounded-[20px] sm:p-5">
-                  <p className="mb-3 text-[13px] font-bold text-[color:var(--cap-ink)] sm:mb-4 sm:text-[14px]">
+                <div className="cap-form-panel mt-5 rounded-[18px] p-4 sm:mt-5 sm:rounded-[20px] sm:p-5">
+                  <p className="mb-3.5 text-[14px] font-bold text-[color:var(--cap-ink)] sm:mb-4 sm:text-[14px]">
                     Escolha seu horário e reserve sua vaga
                   </p>
                   <SignupForm
@@ -73,9 +73,13 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
 
             {/* ---- Imagem ---- */}
             {image && (
-              <div className="cap-image-panel relative min-h-[260px] overflow-hidden lg:min-h-full">
+              <div className="cap-image-panel order-first relative h-[128px] overflow-hidden sm:h-[220px] lg:order-none lg:h-auto lg:min-h-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={image} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                <img
+                  src={image}
+                  alt=""
+                  className="absolute inset-0 h-full w-full object-cover object-[center_42%] sm:object-center"
+                />
                 <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,70,34,0.04)_30%,rgba(5,70,34,0.42)_100%)]" />
               </div>
             )}
@@ -83,8 +87,8 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
 
           {/* ---- Faixa de escassez ---- */}
           {webinar.progress_bar_enabled && (
-            <div className="cap-scarcity border-t border-[color:var(--cap-rule)] px-5 py-5 sm:px-10 sm:py-6 lg:px-12">
-              <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between sm:gap-10">
+            <div className="cap-scarcity border-t border-[color:var(--cap-rule)] px-5 py-4 sm:px-10 sm:py-6 lg:px-12">
+              <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between sm:gap-10">
                 <p className="text-center text-[14px] font-bold leading-tight tracking-[-0.015em] text-[color:var(--cap-ink)] sm:text-left sm:text-[18px]">
                   {scarcity}
                 </p>
