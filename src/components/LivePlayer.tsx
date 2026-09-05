@@ -71,6 +71,19 @@ type Props = {
 
 type Phase = "before" | "live" | "ended";
 
+/** APIs WebKit usadas pelo Safari no iPhone, que só permite tela cheia nativa
+ * diretamente no elemento `<video>`. */
+type WebkitFullscreenDocument = Document & {
+  webkitFullscreenElement?: Element | null;
+  webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type WebkitFullscreenVideo = HTMLVideoElement & {
+  webkitEnterFullscreen?: () => void;
+  webkitExitFullscreen?: () => void;
+  webkitDisplayingFullscreen?: boolean;
+};
+
 /** Segundos de "<apresentador> está se conectando…" no início da transmissão. */
 const CONNECTING_SECONDS = 6;
 
@@ -231,23 +244,63 @@ export function LivePlayer({
     }
   }
 
+  const isPlayerFullscreen = useCallback(() => {
+    const webkitDocument = document as WebkitFullscreenDocument;
+    const target = document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null;
+    const video = videoRef.current as WebkitFullscreenVideo | null;
+    return (
+      target === playerRef.current ||
+      target === video ||
+      Boolean(video?.webkitDisplayingFullscreen)
+    );
+  }, []);
+
   async function toggleFullscreen() {
     const player = playerRef.current;
     if (!player) return;
+    const video = videoRef.current as WebkitFullscreenVideo | null;
+    const webkitDocument = document as WebkitFullscreenDocument;
 
-    if (document.fullscreenElement === player) {
-      await document.exitFullscreen();
+    if (isPlayerFullscreen()) {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (webkitDocument.webkitFullscreenElement && webkitDocument.webkitExitFullscreen) {
+        await webkitDocument.webkitExitFullscreen();
+      } else {
+        video?.webkitExitFullscreen?.();
+      }
       return;
     }
 
-    await player.requestFullscreen();
+    // Android/desktop: o container preserva o layout dos controles. No iPhone,
+    // `requestFullscreen` no div não existe ou rejeita; o WebKit só aceita o
+    // vídeo nativo em tela cheia durante o gesto de clique do usuário.
+    try {
+      if (typeof player.requestFullscreen === "function") {
+        await player.requestFullscreen();
+        return;
+      }
+    } catch {
+      // Segue para o fallback WebKit abaixo.
+    }
+
+    video?.webkitEnterFullscreen?.();
   }
 
   useEffect(() => {
-    const syncFullscreen = () => setIsFullscreen(document.fullscreenElement === playerRef.current);
+    const syncFullscreen = () => setIsFullscreen(isPlayerFullscreen());
+    const video = videoRef.current;
     document.addEventListener("fullscreenchange", syncFullscreen);
-    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
-  }, []);
+    document.addEventListener("webkitfullscreenchange", syncFullscreen);
+    video?.addEventListener("webkitbeginfullscreen", syncFullscreen);
+    video?.addEventListener("webkitendfullscreen", syncFullscreen);
+    return () => {
+      document.removeEventListener("fullscreenchange", syncFullscreen);
+      document.removeEventListener("webkitfullscreenchange", syncFullscreen);
+      video?.removeEventListener("webkitbeginfullscreen", syncFullscreen);
+      video?.removeEventListener("webkitendfullscreen", syncFullscreen);
+    };
+  }, [isPlayerFullscreen]);
 
   // Uma mudança de sessão (recorrência/JIT) sempre começa um progresso novo.
   useEffect(() => {
