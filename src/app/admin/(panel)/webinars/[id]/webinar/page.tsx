@@ -3,13 +3,13 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { updateWebinar } from "@/app/admin/actions";
 import { input, label, card, saveBtn } from "../_steps";
 import { TypeTabs, Toggle } from "../_fields";
+import { dateTimeLocalValue } from "@/lib/time";
 import type { Webinar } from "@/types/db";
 
 export const dynamic = "force-dynamic";
 
-function dtLocal(iso: string | null) {
-  if (!iso) return "";
-  return new Date(iso).toISOString().slice(0, 16);
+function dtLocal(iso: string | null, timezone: string) {
+  return dateTimeLocalValue(iso, timezone);
 }
 
 export default async function StepWebinar({
@@ -44,11 +44,11 @@ export default async function StepWebinar({
         <div className="grid sm:grid-cols-3 gap-4">
           <div>
             <label className={label}>Data e hora de início *</label>
-            <input type="datetime-local" name="start_at" defaultValue={dtLocal(w.start_at)} className={input} />
+            <input type="datetime-local" name="start_at" defaultValue={dtLocal(w.start_at, w.timezone)} className={input} />
           </div>
           <div>
             <label className={label}>Data e hora de finalização *</label>
-            <input type="datetime-local" name="end_at" defaultValue={dtLocal(w.end_at)} className={input} />
+            <input type="datetime-local" name="end_at" defaultValue={dtLocal(w.end_at, w.timezone)} className={input} />
           </div>
           <div>
             <label className={label}>Fuso horário *</label>

@@ -61,6 +61,11 @@ export async function getActiveSingleWebinarRoom(
  * para webinars legados que ainda não receberam uma data no painel.
  */
 export function singleWebinarStartAt(webinar: Webinar): string {
+  // Quando a repetição está ativa, `start_at` define só a primeira referência
+  // de horário. A sala precisa acompanhar a ocorrência atual/próxima, não ficar
+  // presa à data original depois do primeiro sábado.
+  if (webinar.recurrence_enabled) return nextSessionStart(webinar).toISOString();
+
   if (webinar.start_at && !Number.isNaN(new Date(webinar.start_at).getTime())) {
     return webinar.start_at;
   }

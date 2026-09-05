@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { nextSessionStart } from "@/lib/time";
+import { dateTimeLocalToUtcIso, nextSessionStart } from "@/lib/time";
 import { phoneKey } from "@/lib/phone";
 import { getInvitedPhonesByDay } from "@/app/admin/disparos";
 import type { Webinar } from "@/types/db";
@@ -94,7 +94,8 @@ export async function updateWebinar(formData: FormData) {
   if (has("description")) u.description = txt("description") || null;
   if (has("video_url")) u.video_url = txt("video_url");
   if (has("duration_seconds")) u.duration_seconds = num(f.get("duration_seconds"), 600);
-  if (has("timezone")) u.timezone = txt("timezone") || ADMIN_TIMEZONE;
+  const selectedTimezone = txt("timezone") || ADMIN_TIMEZONE;
+  if (has("timezone")) u.timezone = selectedTimezone;
   if (has("status")) u.status = txt("status") || "active";
   if (has("type")) u.type = txt("type") || "unico";
   if (has("jit_interval_minutes")) u.jit_interval_minutes = num(f.get("jit_interval_minutes"), 15);
@@ -108,8 +109,18 @@ export async function updateWebinar(formData: FormData) {
   if (has("audience_base")) u.audience_base = num(f.get("audience_base"), 150);
 
   // Etapa 2 — datas / recorrência / sala de espera
-  if (has("start_at")) u.start_at = txt("start_at") || null;
-  if (has("end_at")) u.end_at = txt("end_at") || null;
+  if (has("start_at")) {
+    const startAt = txt("start_at");
+    const iso = startAt ? dateTimeLocalToUtcIso(startAt, selectedTimezone) : null;
+    if (startAt && !iso) throw new Error("Data e hora de início inválidas para o fuso selecionado.");
+    u.start_at = iso;
+  }
+  if (has("end_at")) {
+    const endAt = txt("end_at");
+    const iso = endAt ? dateTimeLocalToUtcIso(endAt, selectedTimezone) : null;
+    if (endAt && !iso) throw new Error("Data e hora de finalização inválidas para o fuso selecionado.");
+    u.end_at = iso;
+  }
   if (has("recurrence_present")) {
     u.recurrence_enabled = f.get("recurrence_enabled") === "on";
     // Dias da semana ISO (1=seg … 7=dom) marcados nos checkboxes.

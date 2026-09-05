@@ -1,5 +1,43 @@
-import { fromZonedTime } from "date-fns-tz";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import type { Webinar } from "@/types/db";
+
+const DATETIME_LOCAL_FORMAT = "yyyy-MM-dd'T'HH:mm";
+const DATETIME_LOCAL_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
+/**
+ * Converte o valor sem fuso de `<input type="datetime-local">` no instante UTC
+ * correspondente ao fuso escolhido no webinar. O browser nunca inclui offset
+ * nesse campo; gravá-lo diretamente em `timestamptz` o interpretaria como UTC.
+ */
+export function dateTimeLocalToUtcIso(localDateTime: string, timezone: string): string | null {
+  const value = localDateTime.trim();
+  if (!DATETIME_LOCAL_PATTERN.test(value)) return null;
+
+  try {
+    const instant = fromZonedTime(value, timezone);
+    if (Number.isNaN(instant.getTime())) return null;
+
+    // Recusa datas inválidas que o parser poderia normalizar silenciosamente,
+    // como 31/02, mantendo a data/hora mostrada no painel fiel ao que foi salvo.
+    if (formatInTimeZone(instant, timezone, DATETIME_LOCAL_FORMAT) !== value) return null;
+    return instant.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+/** Valor para `<input type="datetime-local">`, exibido no fuso do webinar. */
+export function dateTimeLocalValue(iso: string | null, timezone: string): string {
+  if (!iso) return "";
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return "";
+
+  try {
+    return formatInTimeZone(instant, timezone, DATETIME_LOCAL_FORMAT);
+  } catch {
+    return "";
+  }
+}
 
 /** Monta o instante UTC a partir de "2026-06-16" + "20:00" num fuso. */
 export function buildScheduledStartAt(
