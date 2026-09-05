@@ -203,6 +203,18 @@ export async function deleteWebinar(formData: FormData) {
   redirect("/admin");
 }
 
+/** Publica um rascunho já configurado diretamente pela lista do painel. */
+export async function publishWebinar(formData: FormData) {
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) throw new Error("Webinar inválido para publicação.");
+
+  const { error } = await supabaseAdmin().from("webinars").update({ status: "active" }).eq("id", id);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/webinars/${id}`, "layout");
+}
+
 export async function duplicateWebinar(formData: FormData) {
   const id = String(formData.get("id"));
   const supabase = supabaseAdmin();
@@ -474,8 +486,17 @@ export async function saveIntegrations(formData: FormData) {
       value: String(f.get(`int_${k}_value`) ?? "").trim(),
     };
   }
-  await supabaseAdmin().from("webinars").update({ integrations }).eq("id", webinarId);
+  const publish = f.get("publish") === "1";
+  const { error } = await supabaseAdmin()
+    .from("webinars")
+    .update({ integrations, ...(publish ? { status: "active" } : {}) })
+    .eq("id", webinarId);
+  if (error) throw new Error(error.message);
+
   revalidatePath(`/admin/webinars/${webinarId}/integracoes`);
+  revalidatePath("/admin");
+  if (publish) redirect("/admin");
+
   const to = String(f.get("__redirect") ?? "");
   if (to.startsWith("/admin")) redirect(to);
 }

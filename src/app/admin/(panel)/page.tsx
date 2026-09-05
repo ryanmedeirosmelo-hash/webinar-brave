@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/server";
-import { createWebinar, duplicateWebinar, getLiveWatchState } from "@/app/admin/actions";
+import { createWebinar, duplicateWebinar, getLiveWatchState, publishWebinar } from "@/app/admin/actions";
 import { Icon } from "@/components/Icon";
 import { displayTitle } from "@/components/Brand";
 import type { Webinar } from "@/types/db";
@@ -142,6 +142,17 @@ export default async function AdminWebinarsPage() {
               </div>
 
               <div className="flex items-center gap-2">
+                {w.status !== "active" && (
+                  <form action={publishWebinar}>
+                    <input type="hidden" name="id" value={w.id} />
+                    <button
+                      className="inline-flex h-9 items-center rounded-lg bg-emerald-400 px-3 text-xs font-bold text-emerald-950 transition hover:bg-emerald-300"
+                      title="Publicar webinar"
+                    >
+                      Publicar
+                    </button>
+                  </form>
+                )}
                 <Link href={`/${w.slug}`} target="_blank" className={actionBtn} title="Abrir página de inscrição">
                   <Icon name="globe" size={16} />
                 </Link>

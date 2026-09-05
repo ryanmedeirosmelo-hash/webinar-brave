@@ -146,8 +146,15 @@ export default async function StepIntegracoes({
         </section>
       )}
 
-      <div className="mt-6 flex justify-end">
-        <button className={saveBtn}>Salvar integrações</button>
+      <div className="mt-6 flex flex-wrap justify-end gap-3">
+        <button className={saveBtn}>Salvar rascunho</button>
+        <button
+          name="publish"
+          value="1"
+          className="inline-flex items-center rounded-lg bg-emerald-400 px-6 py-2.5 font-semibold text-emerald-950 shadow-md shadow-emerald-950/30 transition hover:bg-emerald-300 active:scale-[0.98]"
+        >
+          Publicar webinar
+        </button>
       </div>
     </form>
   );
