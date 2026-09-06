@@ -71,21 +71,29 @@ type Props = {
 
 type Phase = "before" | "live" | "ended";
 
-/** APIs WebKit usadas pelo Safari no iPhone, que só permite tela cheia nativa
- * diretamente no elemento `<video>`. */
+/** APIs WebKit de tela cheia, ainda necessárias no Safari mais antigo. Só as
+ * usamos no CONTAINER do player: `video.webkitEnterFullscreen` entrega o vídeo
+ * ao player nativo do iOS/Safari, que sempre desenha os próprios controles
+ * (pausar, barra de progresso, velocidade) — e isso quebra a transmissão
+ * simulada, porque o espectador consegue pausar e avançar a aula. */
 type WebkitFullscreenDocument = Document & {
   webkitFullscreenElement?: Element | null;
   webkitExitFullscreen?: () => Promise<void> | void;
 };
 
-type WebkitFullscreenVideo = HTMLVideoElement & {
-  webkitEnterFullscreen?: () => void;
-  webkitExitFullscreen?: () => void;
-  webkitDisplayingFullscreen?: boolean;
+type WebkitFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
 /** Segundos de "<apresentador> está se conectando…" no início da transmissão. */
 const CONNECTING_SECONDS = 6;
+
+/** Tempo parado até a barra de volume/tela cheia sumir de novo. */
+const CONTROLS_IDLE_MS = 2800;
+
+/** Folga aceita entre o vídeo e o ponto da transmissão antes de voltar o
+ *  ponteiro. Cobre o "nudge" do hls.js sem deixar passar uma busca real. */
+const SEEK_TOLERANCE_SECONDS = 1.5;
 
 function phaseFor(elapsed: number, duration: number): Phase {
   if (elapsed < 0) return "before";
@@ -175,7 +183,47 @@ export function LivePlayer({
   const phase: Phase = previewMode ? "live" : phaseState;
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Tela cheia nativa (Fullscreen API pedida no container) e, onde ela não
+  // existe — iPhone —, a tela cheia por CSS. Nas duas o <video> continua sem
+  // `controls`, então quem aparece é só a nossa barra.
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [cssFullscreen, setCssFullscreen] = useState(false);
+  // A tela cheia por CSS só vale enquanto o player está no ar: no encerramento a
+  // tela inteira troca e a rolagem da página precisa voltar.
+  const overlayFullscreen = cssFullscreen && phase === "live";
+  const isFullscreen = nativeFullscreen || overlayFullscreen;
+  // A barra de volume/tela cheia fica escondida: aparece com o mouse sobre o
+  // player ou no toque, e some sozinha depois de um tempo parado.
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const hideControlsRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Libera a única busca que o próprio player faz (posicionar a aula). */
+  const allowSeekRef = useRef(false);
+
+  /** `keep` segura a barra enquanto o ponteiro ou o foco está nela. */
+  const revealControls = useCallback((keep = false) => {
+    if (hideControlsRef.current) clearTimeout(hideControlsRef.current);
+    hideControlsRef.current = null;
+    setControlsVisible(true);
+    if (!keep) {
+      hideControlsRef.current = setTimeout(
+        () => setControlsVisible(false),
+        CONTROLS_IDLE_MS
+      );
+    }
+  }, []);
+
+  const hideControls = useCallback(() => {
+    if (hideControlsRef.current) clearTimeout(hideControlsRef.current);
+    hideControlsRef.current = null;
+    setControlsVisible(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (hideControlsRef.current) clearTimeout(hideControlsRef.current);
+    },
+    []
+  );
 
   const progressStorageKey =
     previewMode || draftMode || !resumeProgressEnabled
@@ -244,63 +292,85 @@ export function LivePlayer({
     }
   }
 
-  const isPlayerFullscreen = useCallback(() => {
+  /** Tela cheia nativa deste player — só conta quando o elemento em tela cheia
+   *  é o nosso container (o vídeo sozinho significaria player nativo). */
+  const isNativeFullscreen = useCallback(() => {
     const webkitDocument = document as WebkitFullscreenDocument;
     const target = document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null;
-    const video = videoRef.current as WebkitFullscreenVideo | null;
-    return (
-      target === playerRef.current ||
-      target === video ||
-      Boolean(video?.webkitDisplayingFullscreen)
-    );
+    return Boolean(playerRef.current) && target === playerRef.current;
   }, []);
 
   async function toggleFullscreen() {
-    const player = playerRef.current;
+    const player = playerRef.current as WebkitFullscreenElement | null;
     if (!player) return;
-    const video = videoRef.current as WebkitFullscreenVideo | null;
     const webkitDocument = document as WebkitFullscreenDocument;
 
-    if (isPlayerFullscreen()) {
+    if (isNativeFullscreen()) {
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen();
       } else if (webkitDocument.webkitFullscreenElement && webkitDocument.webkitExitFullscreen) {
         await webkitDocument.webkitExitFullscreen();
-      } else {
-        video?.webkitExitFullscreen?.();
       }
       return;
     }
 
-    // Android/desktop: o container preserva o layout dos controles. No iPhone,
-    // `requestFullscreen` no div não existe ou rejeita; o WebKit só aceita o
-    // vídeo nativo em tela cheia durante o gesto de clique do usuário.
+    if (cssFullscreen) {
+      setCssFullscreen(false);
+      return;
+    }
+
+    // A tela cheia é SEMPRE pedida no container, nunca no <video>: assim o vídeo
+    // segue sem `controls` e a barra em tela é a nossa (volume + sair).
     try {
       if (typeof player.requestFullscreen === "function") {
         await player.requestFullscreen();
         return;
       }
+      if (typeof player.webkitRequestFullscreen === "function") {
+        await player.webkitRequestFullscreen();
+        return;
+      }
     } catch {
-      // Segue para o fallback WebKit abaixo.
+      // Safari pode rejeitar o container — segue para a tela cheia por CSS.
     }
 
-    video?.webkitEnterFullscreen?.();
+    // iPhone: não há Fullscreen API para elementos comuns e o único recurso
+    // nativo abriria o player do iOS com controles de pausa e busca. Ocupamos a
+    // viewport por CSS, mantendo a aula sem nenhum controle de reprodução.
+    setCssFullscreen(true);
   }
 
   useEffect(() => {
-    const syncFullscreen = () => setIsFullscreen(isPlayerFullscreen());
-    const video = videoRef.current;
+    const syncFullscreen = () => {
+      const active = isNativeFullscreen();
+      setNativeFullscreen(active);
+      if (active) setCssFullscreen(false);
+      // Entrar ou sair (inclusive pelo Esc) remonta o player: mostra a barra
+      // uma vez para o botão de sair não ficar escondido.
+      revealControls();
+    };
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
-    video?.addEventListener("webkitbeginfullscreen", syncFullscreen);
-    video?.addEventListener("webkitendfullscreen", syncFullscreen);
     return () => {
       document.removeEventListener("fullscreenchange", syncFullscreen);
       document.removeEventListener("webkitfullscreenchange", syncFullscreen);
-      video?.removeEventListener("webkitbeginfullscreen", syncFullscreen);
-      video?.removeEventListener("webkitendfullscreen", syncFullscreen);
     };
-  }, [isPlayerFullscreen]);
+  }, [isNativeFullscreen, revealControls]);
+
+  // Tela cheia por CSS: trava a rolagem da página e devolve o Esc como saída.
+  useEffect(() => {
+    if (!overlayFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCssFullscreen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [overlayFullscreen]);
 
   // Uma mudança de sessão (recorrência/JIT) sempre começa um progresso novo.
   useEffect(() => {
@@ -364,6 +434,7 @@ export function LivePlayer({
         if (next > 0 && next < durationSeconds) setPhase("live");
         const video = videoRef.current;
         if (video && video.readyState >= 1 && next > video.currentTime + 1) {
+          allowSeekRef.current = true;
           video.currentTime = next;
         }
       })
@@ -511,6 +582,7 @@ export function LivePlayer({
         return;
       }
       if (!positioned) {
+        allowSeekRef.current = true;
         video.currentTime = position;
         positioned = true;
       }
@@ -525,13 +597,61 @@ export function LivePlayer({
     };
     video.addEventListener("pause", onPause);
 
+    // Nem avança nem volta: uma aula ao vivo não tem barra de progresso. Vale
+    // para toda origem de busca que não passa pela página — teclas de mídia,
+    // painel de mídia do navegador/sistema, extensão.
+    const onSeeking = () => {
+      if (allowSeekRef.current) {
+        allowSeekRef.current = false;
+        return;
+      }
+      const target = clampPosition(playbackPositionRef.current, durationSeconds);
+      if (Math.abs(video.currentTime - target) > SEEK_TOLERANCE_SECONDS) {
+        video.currentTime = target;
+      }
+    };
+    video.addEventListener("seeking", onSeeking);
+
     if (video.readyState >= 3) resume();
 
     return () => {
       video.removeEventListener("canplay", resume);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("seeking", onSeeking);
     };
   }, [durationSeconds, phase, previewMode]);
+
+  // O painel de mídia do sistema (teclas de mídia, central do navegador) traz
+  // avançar/voltar próprios. Handlers vazios tiram a ação antes de ela virar
+  // uma busca — a trava do `seeking` acima é a rede de segurança.
+  useEffect(() => {
+    if (previewMode || phase !== "live") return;
+    const session = navigator.mediaSession;
+    if (!session) return;
+    const blocked: MediaSessionAction[] = [
+      "seekbackward",
+      "seekforward",
+      "seekto",
+      "previoustrack",
+      "nexttrack",
+    ];
+    for (const action of blocked) {
+      try {
+        session.setActionHandler(action, () => {});
+      } catch {
+        // Ação não suportada neste navegador — nada a bloquear.
+      }
+    }
+    return () => {
+      for (const action of blocked) {
+        try {
+          session.setActionHandler(action, null);
+        } catch {
+          // Idem: se não dá para registrar, também não dá para limpar.
+        }
+      }
+    };
+  }, [phase, previewMode]);
 
   void accentColor; // cores vêm do tema do player (vermelho/branco)
   const brand = brandName || presenterName || title;
@@ -610,7 +730,6 @@ export function LivePlayer({
   // Breve "conectando" no início: evita o vídeo estourar seco após a contagem.
   // O vídeo já carrega por trás e é revelado quando o overlay sai.
   const connecting = !previewMode && elapsed < CONNECTING_SECONDS;
-  const minutos = Math.max(0, Math.floor(elapsed / 60));
 
   return shell(
     <div className="mx-auto grid max-w-[1400px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px]">
@@ -618,9 +737,33 @@ export function LivePlayer({
       <div className="space-y-4">
         <div
           ref={playerRef}
-          className={`relative overflow-hidden bg-black ${
-            isFullscreen ? "h-dvh w-dvw rounded-none" : "aspect-video rounded-2xl"
+          /* `relative` só fora da tela cheia por CSS: as duas classes de
+             posicionamento brigariam e a ordem do Tailwind venceria a do JSX.
+             O tamanho vai explícito (h/w-dvh) porque a margem do `space-y-4`
+             encolheria uma caixa fixa de altura automática. */
+          className={`overflow-hidden bg-black ${
+            overlayFullscreen
+              ? "fixed inset-0 z-50 h-dvh w-dvw rounded-none"
+              : nativeFullscreen
+                ? "relative h-dvh w-dvw rounded-none"
+                : "relative aspect-video rounded-2xl"
           }`}
+          /* Mouse: a barra segue o ponteiro sobre o player. Toque: um toque
+             na área do vídeo mostra, outro esconde. */
+          onPointerEnter={(event) => {
+            if (event.pointerType === "mouse") revealControls();
+          }}
+          onPointerMove={(event) => {
+            if (event.pointerType === "mouse") revealControls();
+          }}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") hideControls();
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType === "mouse") return;
+            if (controlsVisible) hideControls();
+            else revealControls();
+          }}
         >
           <video
             ref={videoRef}
@@ -629,7 +772,9 @@ export function LivePlayer({
             playsInline
             controls={previewMode}
             controlsList={previewMode ? "nodownload" : "nodownload noplaybackrate"}
-            disablePictureInPicture={!fullscreen}
+            /* PiP fora do preview: a janelinha do sistema traz pausa e barra de
+               progresso próprias — a mesma brecha da tela cheia nativa. */
+            disablePictureInPicture={!previewMode}
             onContextMenu={(e) => e.preventDefault()}
             className={`h-full w-full object-contain ${previewMode ? "" : "pointer-events-none"}`}
             onTimeUpdate={(event) => updatePlaybackPosition(event.currentTarget.currentTime)}
@@ -703,9 +848,35 @@ export function LivePlayer({
 
           {videoUrl && !previewMode && (
             <div
-              className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/65 p-1.5 text-white shadow-lg backdrop-blur-md"
+              className={`absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/65 p-1.5 text-white shadow-lg backdrop-blur-md transition-opacity duration-200 ${
+                controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+              }`}
+              /* Na tela cheia por CSS (iPhone) a barra sobe acima do indicador
+                 de home — senão o botão de sair fica fora do alcance. */
+              style={
+                overlayFullscreen
+                  ? { bottom: "max(0.75rem, env(safe-area-inset-bottom))" }
+                  : undefined
+              }
               role="group"
               aria-label="Controles do vídeo"
+              /* Enquanto se mexe na barra ela fica; o toque aqui não pode
+                 chegar no container, senão o próprio uso a esconderia. */
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                revealControls(true);
+              }}
+              /* Sem o stopPropagation o movimento dentro da barra chegaria ao
+                 container e rearmaria a contagem para escondê-la. */
+              onPointerMove={(event) => {
+                event.stopPropagation();
+                revealControls(true);
+              }}
+              onPointerUp={() => revealControls()}
+              onPointerEnter={() => revealControls(true)}
+              onPointerLeave={() => revealControls()}
+              onFocus={() => revealControls(true)}
+              onBlur={() => revealControls()}
             >
               <button
                 type="button"
@@ -756,17 +927,11 @@ export function LivePlayer({
 
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-[20px] font-bold leading-snug tracking-tight sm:text-[22px]">
               {shownTitle}
             </h1>
-            <p className="mt-1 text-[13px] text-[var(--hw-muted)]">
-              {audience.enabled && <>{viewers} assistindo agora · </>}
-              {minutos > 0
-                ? `${minutos} minuto${minutos > 1 ? "s" : ""} de aula assistidos`
-                : "a aula começou agora"}
-            </p>
           </div>
           <div className="flex items-center gap-3">
             <HwAvatar
