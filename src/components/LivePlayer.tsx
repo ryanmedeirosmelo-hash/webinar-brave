@@ -71,17 +71,18 @@ type Props = {
 
 type Phase = "before" | "live" | "ended";
 
-/** APIs WebKit usadas pelo Safari no iPhone, que só permite tela cheia nativa
- * diretamente no elemento `<video>`. */
+/** APIs WebKit de tela cheia, ainda necessárias no Safari mais antigo. Só as
+ * usamos no CONTAINER do player: `video.webkitEnterFullscreen` entrega o vídeo
+ * ao player nativo do iOS/Safari, que sempre desenha os próprios controles
+ * (pausar, barra de progresso, velocidade) — e isso quebra a transmissão
+ * simulada, porque o espectador consegue pausar e avançar a aula. */
 type WebkitFullscreenDocument = Document & {
   webkitFullscreenElement?: Element | null;
   webkitExitFullscreen?: () => Promise<void> | void;
 };
 
-type WebkitFullscreenVideo = HTMLVideoElement & {
-  webkitEnterFullscreen?: () => void;
-  webkitExitFullscreen?: () => void;
-  webkitDisplayingFullscreen?: boolean;
+type WebkitFullscreenElement = HTMLElement & {
+  webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
 /** Segundos de "<apresentador> está se conectando…" no início da transmissão. */
@@ -175,7 +176,15 @@ export function LivePlayer({
   const phase: Phase = previewMode ? "live" : phaseState;
   const [muted, setMuted] = useState(true);
   const [volume, setVolume] = useState(1);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  // Tela cheia nativa (Fullscreen API pedida no container) e, onde ela não
+  // existe — iPhone —, a tela cheia por CSS. Nas duas o <video> continua sem
+  // `controls`, então quem aparece é só a nossa barra.
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
+  const [cssFullscreen, setCssFullscreen] = useState(false);
+  // A tela cheia por CSS só vale enquanto o player está no ar: no encerramento a
+  // tela inteira troca e a rolagem da página precisa voltar.
+  const overlayFullscreen = cssFullscreen && phase === "live";
+  const isFullscreen = nativeFullscreen || overlayFullscreen;
 
   const progressStorageKey =
     previewMode || draftMode || !resumeProgressEnabled
@@ -244,63 +253,82 @@ export function LivePlayer({
     }
   }
 
-  const isPlayerFullscreen = useCallback(() => {
+  /** Tela cheia nativa deste player — só conta quando o elemento em tela cheia
+   *  é o nosso container (o vídeo sozinho significaria player nativo). */
+  const isNativeFullscreen = useCallback(() => {
     const webkitDocument = document as WebkitFullscreenDocument;
     const target = document.fullscreenElement ?? webkitDocument.webkitFullscreenElement ?? null;
-    const video = videoRef.current as WebkitFullscreenVideo | null;
-    return (
-      target === playerRef.current ||
-      target === video ||
-      Boolean(video?.webkitDisplayingFullscreen)
-    );
+    return Boolean(playerRef.current) && target === playerRef.current;
   }, []);
 
   async function toggleFullscreen() {
-    const player = playerRef.current;
+    const player = playerRef.current as WebkitFullscreenElement | null;
     if (!player) return;
-    const video = videoRef.current as WebkitFullscreenVideo | null;
     const webkitDocument = document as WebkitFullscreenDocument;
 
-    if (isPlayerFullscreen()) {
+    if (isNativeFullscreen()) {
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen();
       } else if (webkitDocument.webkitFullscreenElement && webkitDocument.webkitExitFullscreen) {
         await webkitDocument.webkitExitFullscreen();
-      } else {
-        video?.webkitExitFullscreen?.();
       }
       return;
     }
 
-    // Android/desktop: o container preserva o layout dos controles. No iPhone,
-    // `requestFullscreen` no div não existe ou rejeita; o WebKit só aceita o
-    // vídeo nativo em tela cheia durante o gesto de clique do usuário.
+    if (cssFullscreen) {
+      setCssFullscreen(false);
+      return;
+    }
+
+    // A tela cheia é SEMPRE pedida no container, nunca no <video>: assim o vídeo
+    // segue sem `controls` e a barra em tela é a nossa (volume + sair).
     try {
       if (typeof player.requestFullscreen === "function") {
         await player.requestFullscreen();
         return;
       }
+      if (typeof player.webkitRequestFullscreen === "function") {
+        await player.webkitRequestFullscreen();
+        return;
+      }
     } catch {
-      // Segue para o fallback WebKit abaixo.
+      // Safari pode rejeitar o container — segue para a tela cheia por CSS.
     }
 
-    video?.webkitEnterFullscreen?.();
+    // iPhone: não há Fullscreen API para elementos comuns e o único recurso
+    // nativo abriria o player do iOS com controles de pausa e busca. Ocupamos a
+    // viewport por CSS, mantendo a aula sem nenhum controle de reprodução.
+    setCssFullscreen(true);
   }
 
   useEffect(() => {
-    const syncFullscreen = () => setIsFullscreen(isPlayerFullscreen());
-    const video = videoRef.current;
+    const syncFullscreen = () => {
+      const active = isNativeFullscreen();
+      setNativeFullscreen(active);
+      if (active) setCssFullscreen(false);
+    };
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
-    video?.addEventListener("webkitbeginfullscreen", syncFullscreen);
-    video?.addEventListener("webkitendfullscreen", syncFullscreen);
     return () => {
       document.removeEventListener("fullscreenchange", syncFullscreen);
       document.removeEventListener("webkitfullscreenchange", syncFullscreen);
-      video?.removeEventListener("webkitbeginfullscreen", syncFullscreen);
-      video?.removeEventListener("webkitendfullscreen", syncFullscreen);
     };
-  }, [isPlayerFullscreen]);
+  }, [isNativeFullscreen]);
+
+  // Tela cheia por CSS: trava a rolagem da página e devolve o Esc como saída.
+  useEffect(() => {
+    if (!overlayFullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setCssFullscreen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [overlayFullscreen]);
 
   // Uma mudança de sessão (recorrência/JIT) sempre começa um progresso novo.
   useEffect(() => {
@@ -618,8 +646,16 @@ export function LivePlayer({
       <div className="space-y-4">
         <div
           ref={playerRef}
-          className={`relative overflow-hidden bg-black ${
-            isFullscreen ? "h-dvh w-dvw rounded-none" : "aspect-video rounded-2xl"
+          /* `relative` só fora da tela cheia por CSS: as duas classes de
+             posicionamento brigariam e a ordem do Tailwind venceria a do JSX.
+             O tamanho vai explícito (h/w-dvh) porque a margem do `space-y-4`
+             encolheria uma caixa fixa de altura automática. */
+          className={`overflow-hidden bg-black ${
+            overlayFullscreen
+              ? "fixed inset-0 z-50 h-dvh w-dvw rounded-none"
+              : nativeFullscreen
+                ? "relative h-dvh w-dvw rounded-none"
+                : "relative aspect-video rounded-2xl"
           }`}
         >
           <video
@@ -704,6 +740,13 @@ export function LivePlayer({
           {videoUrl && !previewMode && (
             <div
               className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/65 p-1.5 text-white shadow-lg backdrop-blur-md"
+              /* Na tela cheia por CSS (iPhone) a barra sobe acima do indicador
+                 de home — senão o botão de sair fica fora do alcance. */
+              style={
+                overlayFullscreen
+                  ? { bottom: "max(0.75rem, env(safe-area-inset-bottom))" }
+                  : undefined
+              }
               role="group"
               aria-label="Controles do vídeo"
             >
