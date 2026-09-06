@@ -97,7 +97,12 @@ export async function updateWebinar(formData: FormData) {
   const selectedTimezone = txt("timezone") || ADMIN_TIMEZONE;
   if (has("timezone")) u.timezone = selectedTimezone;
   if (has("status")) u.status = txt("status") || "active";
-  if (has("type")) u.type = txt("type") || "unico";
+  const submittedType = has("type")
+    ? txt("type") === "just_in_time"
+      ? "just_in_time"
+      : "unico"
+    : null;
+  if (submittedType) u.type = submittedType;
   if (has("jit_interval_minutes")) u.jit_interval_minutes = num(f.get("jit_interval_minutes"), 15);
   if (has("available_times")) {
     u.available_times = txt("available_times")
@@ -122,22 +127,33 @@ export async function updateWebinar(formData: FormData) {
     u.end_at = iso;
   }
   if (has("recurrence_present")) {
-    u.recurrence_enabled = f.get("recurrence_enabled") === "on";
-    // Dias da semana ISO (1=seg … 7=dom) marcados nos checkboxes.
-    const dayNames = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
-    const days: number[] = [];
-    for (let d = 1; d <= 7; d++) if (f.get(`recurrence_day_${d}`) === "on") days.push(d);
-    u.recurrence_days = days;
-    // recurrence_dow segue só como rótulo de divulgação, gerado a partir dos dias.
-    const times = txt("available_times")
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
-    u.recurrence_dow = days.length
-      ? `${days.map((d) => dayNames[d]).join(", ")}${times.length ? ` às ${times.join(" / ")}` : ""}`
-      : null;
+    if (submittedType === "just_in_time") {
+      // JIT já se repete por intervalo. Manter uma recorrência semanal ao
+      // mesmo tempo deixa a rota pública mudar de comportamento sem intenção.
+      u.recurrence_enabled = false;
+      u.recurrence_freq = "weekly";
+      u.recurrence_days = [];
+      u.recurrence_dow = null;
+    } else {
+      u.recurrence_enabled = f.get("recurrence_enabled") === "on";
+      // Dias da semana ISO (1=seg … 7=dom) marcados nos checkboxes.
+      const dayNames = ["", "Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+      const days: number[] = [];
+      for (let d = 1; d <= 7; d++) if (f.get(`recurrence_day_${d}`) === "on") days.push(d);
+      u.recurrence_days = days;
+      // recurrence_dow segue só como rótulo de divulgação, gerado a partir dos dias.
+      const times = txt("available_times")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      u.recurrence_dow = days.length
+        ? `${days.map((d) => dayNames[d]).join(", ")}${times.length ? ` às ${times.join(" / ")}` : ""}`
+        : null;
+    }
   }
-  if (has("recurrence_freq")) u.recurrence_freq = txt("recurrence_freq") || "weekly";
+  if (has("recurrence_freq") && submittedType !== "just_in_time") {
+    u.recurrence_freq = txt("recurrence_freq") || "weekly";
+  }
   if (has("waiting_present")) u.waiting_room_enabled = f.get("waiting_room_enabled") === "on";
   if (has("waiting_room_page")) u.waiting_room_page = txt("waiting_room_page") || "default";
 
@@ -158,8 +174,10 @@ export async function updateWebinar(formData: FormData) {
     const keys: Array<"name" | "email" | "whatsapp"> = ["name", "email", "whatsapp"];
     u.form_fields = keys.map((k) => ({
       key: k,
-      enabled: f.get(`field_${k}_enabled`) === "on",
-      required: f.get(`field_${k}_required`) === "on",
+      // Nome e e-mail são o contrato mínimo da inscrição no servidor. Só o
+      // WhatsApp pode ser opcional/configurável pelo painel.
+      enabled: k === "whatsapp" ? f.get(`field_${k}_enabled`) === "on" : true,
+      required: k === "whatsapp" ? f.get(`field_${k}_required`) === "on" : true,
       label: txt(`field_${k}_label`),
     }));
   }

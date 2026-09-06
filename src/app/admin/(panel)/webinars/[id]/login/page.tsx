@@ -130,6 +130,7 @@ export default async function StepLogin({
           <div className="space-y-3">
             {(["name", "email", "whatsapp"] as const).map((k) => {
               const f = fieldOf(k);
+              const requiredByRegistration = k === "name" || k === "email";
               return (
                 <div key={k} className="grid sm:grid-cols-[110px_1fr_auto_auto] gap-3 items-center border border-slate-800 rounded-lg p-3">
                   <span className="text-sm font-medium text-slate-300">{FIELD_LABELS[k]}</span>
@@ -139,8 +140,16 @@ export default async function StepLogin({
                     placeholder="Título do campo"
                     className={input}
                   />
-                  <Toggle name={`field_${k}_enabled`} defaultChecked={f?.enabled ?? true} label="Exibir" />
-                  <Toggle name={`field_${k}_required`} defaultChecked={f?.required ?? false} label="Obrigatório" />
+                  {requiredByRegistration ? (
+                    <span className="text-xs font-medium text-emerald-300">Sempre exibido</span>
+                  ) : (
+                    <Toggle name={`field_${k}_enabled`} defaultChecked={f?.enabled ?? true} label="Exibir" />
+                  )}
+                  {requiredByRegistration ? (
+                    <span className="text-xs font-medium text-emerald-300">Sempre obrigatório</span>
+                  ) : (
+                    <Toggle name={`field_${k}_required`} defaultChecked={f?.required ?? false} label="Obrigatório" />
+                  )}
                 </div>
               );
             })}
@@ -182,7 +191,7 @@ export default async function StepLogin({
             </div>
             <div className="mt-2 space-y-1.5">
               {(["name", "email", "whatsapp"] as const)
-                .filter((k) => fieldOf(k)?.enabled ?? true)
+                .filter((k) => k === "name" || k === "email" || (fieldOf(k)?.enabled ?? true))
                 .map((k) => (
                   <div key={k}>
                     <p className="text-[10px] font-bold">{fieldOf(k)?.label || FIELD_LABELS[k]}</p>

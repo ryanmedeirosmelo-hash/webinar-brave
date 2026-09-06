@@ -27,7 +27,6 @@ export type LeadSource = {
 type WebhookConfig = { enabled?: unknown; value?: unknown };
 
 const MAX_SOURCE_LENGTH = 2_000;
-const WEBHOOK_TIMEOUT_MS = 4_000;
 
 function text(value: unknown, max = MAX_SOURCE_LENGTH) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -122,46 +121,20 @@ export function buildLeadWebhookPayload(
 }
 
 /**
- * A falha de uma ferramenta de marketing não pode cancelar o acesso do lead ao
- * webinar. Por isso o erro é registrado sem expor dados pessoais e a inscrição
- * continua válida no Supabase.
+ * Prepara a entrega para a outbox persistente. O cron do Supabase a despacha
+ * depois da inscrição, portanto uma integração lenta nunca segura a confirmação
+ * nem o redirecionamento do lead.
  */
-export async function notifyLeadWebhook(
+export function buildLeadWebhookDelivery(
   webinar: WebinarWebhookConfig,
   registration: LeadRegistration,
   source: LeadSource
 ) {
   const url = configuredWebhookUrl(webinar.integrations);
-  if (!url) return;
+  if (!url) return null;
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json",
-      },
-      body: JSON.stringify(buildLeadWebhookPayload(webinar, registration, source)),
-      signal: controller.signal,
-      redirect: "error",
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      console.error("Lead webhook returned a non-success status", {
-        webinarType: webinar.type,
-        status: response.status,
-      });
-    }
-  } catch (error) {
-    console.error("Lead webhook delivery failed", {
-      webinarType: webinar.type,
-      reason: error instanceof Error ? error.name : "unknown",
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  return {
+    targetUrl: url,
+    payload: buildLeadWebhookPayload(webinar, registration, source),
+  };
 }

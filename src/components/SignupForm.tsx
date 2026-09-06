@@ -167,9 +167,9 @@ export function SignupForm({
   const isWeekly =
     !isJit && recurrenceEnabled && recurrenceFreq === "weekly" && (recurrenceDays?.length ?? 0) > 0;
   const useSlots = isJit || isWeekly;
-  // A lista se refaz a cada segundo. A página de captura só oferece sessões
-  // futuras: no instante em que um horário começa, ele some e o próximo passa
-  // a ser a opção selecionada.
+  // A lista se refaz a cada segundo. No JIT, a sessão que acabou de começar
+  // continua elegível enquanto está ao vivo: o lead que clicou na virada do
+  // minuto entra nela, em vez de receber erro e precisar escolher de novo.
   const slotsAnchor = Math.floor(now / 1_000);
   const slots = useMemo<JitSlot[]>(() => {
     if (!useSlots || !slotsAnchor) return [];
@@ -193,9 +193,13 @@ export function SignupForm({
 
     // A mesma sessão pode coincidir com o intervalo (ex.: 20:00). Remove a
     // duplicata e mantém a lista cronológica.
-    return [...new Map(generated.filter((s) => s.startMs > nowMs).map((s) => [s.startMs, s])).values()].sort(
-      (a, b) => a.startMs - b.startMs
-    );
+    return [
+      ...new Map(
+        generated
+          .filter((s) => (isJit ? s.startMs + durationSeconds * 1_000 > nowMs : s.startMs > nowMs))
+          .map((s) => [s.startMs, s])
+      ).values(),
+    ].sort((a, b) => a.startMs - b.startMs);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotsAnchor, useSlots, isJit, jitIntervalMinutes, durationSeconds, timezone]);
 
@@ -220,8 +224,11 @@ export function SignupForm({
         const f = byKey.get(key);
         return {
           key,
-          enabled: f?.enabled ?? true,
-          required: f?.required ?? key !== "whatsapp",
+          // Nome e e-mail são obrigatórios no servidor. Forçá-los também na
+          // interface evita que uma configuração antiga esconda campos que a
+          // ação de inscrição inevitavelmente exigirá.
+          enabled: key === "whatsapp" ? (f?.enabled ?? true) : true,
+          required: key === "whatsapp" ? (f?.required ?? false) : true,
           label: f?.label?.trim() || FIELD_DEFAULTS[key].label,
         };
       })

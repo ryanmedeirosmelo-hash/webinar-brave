@@ -61,46 +61,55 @@ export default async function StepWebinar({
         </div>
 
         <div className="mt-5 border-t border-slate-800 pt-5">
-          <Toggle name="recurrence_enabled" defaultChecked={w.recurrence_enabled} label="Repetir webinar diariamente ou semanalmente" />
-          <div className="grid sm:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className={label}>Escolha quando</label>
-              <select name="recurrence_freq" defaultValue={w.recurrence_freq} className={input}>
-                <option value="weekly">Semanal</option>
-                <option value="daily">Diário</option>
-              </select>
-            </div>
-            <div>
-              <label className={label}>Dias da semana</label>
-              <div className="flex flex-wrap gap-2 mt-1">
-                {([
-                  [1, "Seg"],
-                  [2, "Ter"],
-                  [3, "Qua"],
-                  [4, "Qui"],
-                  [5, "Sex"],
-                  [6, "Sáb"],
-                  [7, "Dom"],
-                ] as const).map(([d, lbl]) => (
-                  <label
-                    key={d}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      name={`recurrence_day_${d}`}
-                      defaultChecked={(w.recurrence_days ?? []).includes(d)}
-                      className="accent-emerald-500"
-                    />
-                    <span className="text-sm text-slate-200">{lbl}</span>
-                  </label>
-                ))}
+          {w.type === "just_in_time" ? (
+            <p className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-sm text-sky-100">
+              Just in time já cria sessões por intervalo. A recorrência semanal fica desligada para evitar dois
+              comportamentos concorrentes.
+            </p>
+          ) : (
+            <>
+              <Toggle name="recurrence_enabled" defaultChecked={w.recurrence_enabled} label="Repetir webinar diariamente ou semanalmente" />
+              <div className="grid sm:grid-cols-2 gap-4 mt-4">
+                <div>
+                  <label className={label}>Escolha quando</label>
+                  <select name="recurrence_freq" defaultValue={w.recurrence_freq} className={input}>
+                    <option value="weekly">Semanal</option>
+                    <option value="daily">Diário</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={label}>Dias da semana</label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {([
+                      [1, "Seg"],
+                      [2, "Ter"],
+                      [3, "Qua"],
+                      [4, "Qui"],
+                      [5, "Sex"],
+                      [6, "Sáb"],
+                      [7, "Dom"],
+                    ] as const).map(([d, lbl]) => (
+                      <label
+                        key={d}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          name={`recurrence_day_${d}`}
+                          defaultChecked={(w.recurrence_days ?? []).includes(d)}
+                          className="accent-emerald-500"
+                        />
+                        <span className="text-sm text-slate-200">{lbl}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    Use os horários do bloco abaixo (ex.: 19:15). A sala abre sozinha só nesses dias.
+                  </p>
+                </div>
               </div>
-              <p className="mt-1.5 text-xs text-slate-500">
-                Use os horários do bloco abaixo (ex.: 19:15). A sala abre sozinha só nesses dias.
-              </p>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         <div className="mt-5 border-t border-slate-800 pt-5">

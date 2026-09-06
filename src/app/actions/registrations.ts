@@ -2,7 +2,8 @@
 
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { notifyLeadWebhook, type LeadSource } from "@/lib/lead-webhook";
+import { randomUUID } from "crypto";
+import { buildLeadWebhookDelivery, type LeadSource } from "@/lib/lead-webhook";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { registrationSchema } from "@/lib/schemas";
 import {
@@ -30,6 +31,8 @@ type WebinarRow = {
   form_fields: FormField[] | null;
   integrations: Record<string, unknown> | null;
 };
+
+type StoredRegistration = { access_token: string; created_at: string };
 
 const WEBINAR_COLS =
   "id, timezone, status, type, jit_interval_minutes, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days, available_times, form_fields, integrations";
@@ -80,10 +83,57 @@ function whatsappIsRequired(w: WebinarRow) {
 
 function isWeekly(w: WebinarRow): boolean {
   return (
+    w.type !== "just_in_time" &&
     w.recurrence_enabled &&
     w.recurrence_freq === "weekly" &&
     (w.recurrence_days?.length ?? 0) > 0
   );
+}
+
+/**
+ * Insere a inscrição e a entrega de webhook como uma única operação do banco.
+ * O token é criado antes para que o payload já carregue o link final da sala.
+ */
+async function storeRegistration(
+  webinar: WebinarRow,
+  registration: {
+    name: string;
+    email: string;
+    phone: string | null;
+    scheduledStartAt: Date;
+  },
+  source: LeadSource
+) {
+  const accessToken = randomUUID();
+  const createdAt = new Date().toISOString();
+  const registeredSessionUrl = await sessionUrl(accessToken);
+  const delivery = buildLeadWebhookDelivery(
+    webinar,
+    {
+      name: registration.name,
+      email: registration.email,
+      phone: registration.phone,
+      scheduledStartAt: registration.scheduledStartAt.toISOString(),
+      createdAt,
+      sessionUrl: registeredSessionUrl,
+    },
+    source
+  );
+
+  return supabaseAdmin()
+    .rpc("create_registration_with_webhook_delivery", {
+      p_webinar_id: webinar.id,
+      p_name: registration.name,
+      p_email: registration.email,
+      p_phone: registration.phone,
+      p_scheduled_start_at: registration.scheduledStartAt.toISOString(),
+      p_timezone: webinar.timezone,
+      p_access_token: accessToken,
+      p_created_at: createdAt,
+      p_webhook_url: delivery?.targetUrl ?? null,
+      p_webhook_payload: delivery?.payload ?? null,
+    })
+    .single<StoredRegistration>();
 }
 
 /**
@@ -126,30 +176,28 @@ function validateSession(
   }
 
   if (w.type === "just_in_time") {
-    // O formulário público do JIT oferece somente o próximo intervalo e os
-    // horários fixos configurados (neste webinar, 20:00). Repete a regra no
-    // servidor para impedir que uma requisição manual cadastre outro horário.
-    const nextJitSlot = jitSlots({
+    // Além da próxima janela, aceita a sessão que acabou de começar enquanto
+    // ela ainda está ao vivo. Assim um clique na virada do minuto não falha e
+    // o lead é levado direto à transmissão em vez de precisar se cadastrar de
+    // novo para o minuto seguinte.
+    const jitCandidates = jitSlots({
       intervalMinutes: Math.max(1, Math.floor(w.jit_interval_minutes || 15)),
       durationSeconds: w.duration_seconds,
       timezone: w.timezone,
       nowMs: now,
       upcoming: 1,
-    }).find((slot) => slot.startMs > now);
-    const nextFixedSlot = recurrenceSlots({
+    });
+    const fixedCandidates = recurrenceSlots({
       times: w.available_times ?? [],
       days: [1, 2, 3, 4, 5, 6, 7],
       durationSeconds: w.duration_seconds,
       timezone: w.timezone,
       nowMs: now,
       upcoming: 1,
-    }).find((slot) => slot.startMs > now);
-    const isFixedSession = startMs === nextFixedSlot?.startMs;
-    if (startMs !== nextJitSlot?.startMs && !isFixedSession) {
+    });
+    const isAllowedSession = [...jitCandidates, ...fixedCandidates].some((slot) => slot.startMs === startMs);
+    if (!isAllowedSession) {
       return "Escolha o próximo horário disponível ou a sessão das 20h.";
-    }
-    if (requireFutureSession && elapsed >= 0) {
-      return "Este horário já passou. Escolha o próximo.";
     }
     if (elapsed >= w.duration_seconds) {
       return "Esta sessão já foi encerrada. Escolha o próximo horário.";
@@ -213,37 +261,15 @@ export async function createRegistration(
   const err = validateSession(webinar, date, time, scheduledStartAt, false, true);
   if (err) return { error: err };
 
-  const { data: reg, error: rErr } = await supabase
-    .from("registrations")
-    .insert({
-      webinar_id: webinar.id,
-      name,
-      email,
-      phone: phone || null,
-      scheduled_start_at: scheduledStartAt.toISOString(),
-      timezone: webinar.timezone,
-    })
-    .select("access_token, created_at")
-    .single();
+  const { data: reg, error: rErr } = await storeRegistration(
+    webinar,
+    { name, email, phone: phone || null, scheduledStartAt },
+    source
+  );
 
   if (rErr || !reg) {
     return { error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
-
-  const registeredSessionUrl = await sessionUrl(reg.access_token);
-
-  await notifyLeadWebhook(
-    webinar,
-    {
-      name,
-      email,
-      phone: phone || null,
-      scheduledStartAt: scheduledStartAt.toISOString(),
-      createdAt: reg.created_at,
-      sessionUrl: registeredSessionUrl,
-    },
-    source
-  );
 
   // Antes da aula, a pessoa segue direto para a sala: ela mostra a contagem
   // regressiva até o horário marcado. A página final só aparece após o término.
@@ -314,37 +340,15 @@ export async function registerForSession(input: {
     return { ok: true, token: existing.access_token, scheduledStartAtIso: iso };
   }
 
-  const { data: reg, error: rErr } = await supabase
-    .from("registrations")
-    .insert({
-      webinar_id: webinar.id,
-      name,
-      email,
-      phone,
-      scheduled_start_at: iso,
-      timezone: webinar.timezone,
-    })
-    .select("access_token, created_at")
-    .single();
+  const { data: reg, error: rErr } = await storeRegistration(
+    webinar,
+    { name, email, phone, scheduledStartAt },
+    source
+  );
 
   if (rErr || !reg) {
     return { ok: false, error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
-
-  const registeredSessionUrl = await sessionUrl(reg.access_token);
-
-  await notifyLeadWebhook(
-    webinar,
-    {
-      name,
-      email,
-      phone,
-      scheduledStartAt: iso,
-      createdAt: reg.created_at,
-      sessionUrl: registeredSessionUrl,
-    },
-    source
-  );
 
   return { ok: true, token: reg.access_token, scheduledStartAtIso: iso };
 }
