@@ -88,6 +88,13 @@ type WebkitFullscreenElement = HTMLElement & {
 /** Segundos de "<apresentador> está se conectando…" no início da transmissão. */
 const CONNECTING_SECONDS = 6;
 
+/** Tempo parado até a barra de volume/tela cheia sumir de novo. */
+const CONTROLS_IDLE_MS = 2800;
+
+/** Folga aceita entre o vídeo e o ponto da transmissão antes de voltar o
+ *  ponteiro. Cobre o "nudge" do hls.js sem deixar passar uma busca real. */
+const SEEK_TOLERANCE_SECONDS = 1.5;
+
 function phaseFor(elapsed: number, duration: number): Phase {
   if (elapsed < 0) return "before";
   if (elapsed >= duration) return "ended";
@@ -185,6 +192,38 @@ export function LivePlayer({
   // tela inteira troca e a rolagem da página precisa voltar.
   const overlayFullscreen = cssFullscreen && phase === "live";
   const isFullscreen = nativeFullscreen || overlayFullscreen;
+  // A barra de volume/tela cheia fica escondida: aparece com o mouse sobre o
+  // player ou no toque, e some sozinha depois de um tempo parado.
+  const [controlsVisible, setControlsVisible] = useState(false);
+  const hideControlsRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Libera a única busca que o próprio player faz (posicionar a aula). */
+  const allowSeekRef = useRef(false);
+
+  /** `keep` segura a barra enquanto o ponteiro ou o foco está nela. */
+  const revealControls = useCallback((keep = false) => {
+    if (hideControlsRef.current) clearTimeout(hideControlsRef.current);
+    hideControlsRef.current = null;
+    setControlsVisible(true);
+    if (!keep) {
+      hideControlsRef.current = setTimeout(
+        () => setControlsVisible(false),
+        CONTROLS_IDLE_MS
+      );
+    }
+  }, []);
+
+  const hideControls = useCallback(() => {
+    if (hideControlsRef.current) clearTimeout(hideControlsRef.current);
+    hideControlsRef.current = null;
+    setControlsVisible(false);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (hideControlsRef.current) clearTimeout(hideControlsRef.current);
+    },
+    []
+  );
 
   const progressStorageKey =
     previewMode || draftMode || !resumeProgressEnabled
@@ -306,6 +345,9 @@ export function LivePlayer({
       const active = isNativeFullscreen();
       setNativeFullscreen(active);
       if (active) setCssFullscreen(false);
+      // Entrar ou sair (inclusive pelo Esc) remonta o player: mostra a barra
+      // uma vez para o botão de sair não ficar escondido.
+      revealControls();
     };
     document.addEventListener("fullscreenchange", syncFullscreen);
     document.addEventListener("webkitfullscreenchange", syncFullscreen);
@@ -313,7 +355,7 @@ export function LivePlayer({
       document.removeEventListener("fullscreenchange", syncFullscreen);
       document.removeEventListener("webkitfullscreenchange", syncFullscreen);
     };
-  }, [isNativeFullscreen]);
+  }, [isNativeFullscreen, revealControls]);
 
   // Tela cheia por CSS: trava a rolagem da página e devolve o Esc como saída.
   useEffect(() => {
@@ -392,6 +434,7 @@ export function LivePlayer({
         if (next > 0 && next < durationSeconds) setPhase("live");
         const video = videoRef.current;
         if (video && video.readyState >= 1 && next > video.currentTime + 1) {
+          allowSeekRef.current = true;
           video.currentTime = next;
         }
       })
@@ -539,6 +582,7 @@ export function LivePlayer({
         return;
       }
       if (!positioned) {
+        allowSeekRef.current = true;
         video.currentTime = position;
         positioned = true;
       }
@@ -553,13 +597,61 @@ export function LivePlayer({
     };
     video.addEventListener("pause", onPause);
 
+    // Nem avança nem volta: uma aula ao vivo não tem barra de progresso. Vale
+    // para toda origem de busca que não passa pela página — teclas de mídia,
+    // painel de mídia do navegador/sistema, extensão.
+    const onSeeking = () => {
+      if (allowSeekRef.current) {
+        allowSeekRef.current = false;
+        return;
+      }
+      const target = clampPosition(playbackPositionRef.current, durationSeconds);
+      if (Math.abs(video.currentTime - target) > SEEK_TOLERANCE_SECONDS) {
+        video.currentTime = target;
+      }
+    };
+    video.addEventListener("seeking", onSeeking);
+
     if (video.readyState >= 3) resume();
 
     return () => {
       video.removeEventListener("canplay", resume);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("seeking", onSeeking);
     };
   }, [durationSeconds, phase, previewMode]);
+
+  // O painel de mídia do sistema (teclas de mídia, central do navegador) traz
+  // avançar/voltar próprios. Handlers vazios tiram a ação antes de ela virar
+  // uma busca — a trava do `seeking` acima é a rede de segurança.
+  useEffect(() => {
+    if (previewMode || phase !== "live") return;
+    const session = navigator.mediaSession;
+    if (!session) return;
+    const blocked: MediaSessionAction[] = [
+      "seekbackward",
+      "seekforward",
+      "seekto",
+      "previoustrack",
+      "nexttrack",
+    ];
+    for (const action of blocked) {
+      try {
+        session.setActionHandler(action, () => {});
+      } catch {
+        // Ação não suportada neste navegador — nada a bloquear.
+      }
+    }
+    return () => {
+      for (const action of blocked) {
+        try {
+          session.setActionHandler(action, null);
+        } catch {
+          // Idem: se não dá para registrar, também não dá para limpar.
+        }
+      }
+    };
+  }, [phase, previewMode]);
 
   void accentColor; // cores vêm do tema do player (vermelho/branco)
   const brand = brandName || presenterName || title;
@@ -657,6 +749,22 @@ export function LivePlayer({
                 ? "relative h-dvh w-dvw rounded-none"
                 : "relative aspect-video rounded-2xl"
           }`}
+          /* Mouse: a barra segue o ponteiro sobre o player. Toque: um toque
+             na área do vídeo mostra, outro esconde. */
+          onPointerEnter={(event) => {
+            if (event.pointerType === "mouse") revealControls();
+          }}
+          onPointerMove={(event) => {
+            if (event.pointerType === "mouse") revealControls();
+          }}
+          onPointerLeave={(event) => {
+            if (event.pointerType === "mouse") hideControls();
+          }}
+          onPointerDown={(event) => {
+            if (event.pointerType === "mouse") return;
+            if (controlsVisible) hideControls();
+            else revealControls();
+          }}
         >
           <video
             ref={videoRef}
@@ -665,7 +773,9 @@ export function LivePlayer({
             playsInline
             controls={previewMode}
             controlsList={previewMode ? "nodownload" : "nodownload noplaybackrate"}
-            disablePictureInPicture={!fullscreen}
+            /* PiP fora do preview: a janelinha do sistema traz pausa e barra de
+               progresso próprias — a mesma brecha da tela cheia nativa. */
+            disablePictureInPicture={!previewMode}
             onContextMenu={(e) => e.preventDefault()}
             className={`h-full w-full object-contain ${previewMode ? "" : "pointer-events-none"}`}
             onTimeUpdate={(event) => updatePlaybackPosition(event.currentTarget.currentTime)}
@@ -739,7 +849,9 @@ export function LivePlayer({
 
           {videoUrl && !previewMode && (
             <div
-              className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/65 p-1.5 text-white shadow-lg backdrop-blur-md"
+              className={`absolute bottom-3 right-3 z-20 flex items-center gap-1.5 rounded-xl border border-white/15 bg-black/65 p-1.5 text-white shadow-lg backdrop-blur-md transition-opacity duration-200 ${
+                controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
+              }`}
               /* Na tela cheia por CSS (iPhone) a barra sobe acima do indicador
                  de home — senão o botão de sair fica fora do alcance. */
               style={
@@ -749,6 +861,23 @@ export function LivePlayer({
               }
               role="group"
               aria-label="Controles do vídeo"
+              /* Enquanto se mexe na barra ela fica; o toque aqui não pode
+                 chegar no container, senão o próprio uso a esconderia. */
+              onPointerDown={(event) => {
+                event.stopPropagation();
+                revealControls(true);
+              }}
+              /* Sem o stopPropagation o movimento dentro da barra chegaria ao
+                 container e rearmaria a contagem para escondê-la. */
+              onPointerMove={(event) => {
+                event.stopPropagation();
+                revealControls(true);
+              }}
+              onPointerUp={() => revealControls()}
+              onPointerEnter={() => revealControls(true)}
+              onPointerLeave={() => revealControls()}
+              onFocus={() => revealControls(true)}
+              onBlur={() => revealControls()}
             >
               <button
                 type="button"
