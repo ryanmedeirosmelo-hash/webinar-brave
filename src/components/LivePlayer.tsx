@@ -730,7 +730,6 @@ export function LivePlayer({
   // Breve "conectando" no início: evita o vídeo estourar seco após a contagem.
   // O vídeo já carrega por trás e é revelado quando o overlay sai.
   const connecting = !previewMode && elapsed < CONNECTING_SECONDS;
-  const minutos = Math.max(0, Math.floor(elapsed / 60));
 
   return shell(
     <div className="mx-auto grid max-w-[1400px] gap-5 px-4 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_400px]">
@@ -928,17 +927,11 @@ export function LivePlayer({
 
         </div>
 
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <h1 className="text-[20px] font-bold leading-snug tracking-tight sm:text-[22px]">
               {shownTitle}
             </h1>
-            <p className="mt-1 text-[13px] text-[var(--hw-muted)]">
-              {audience.enabled && <>{viewers} assistindo agora · </>}
-              {minutos > 0
-                ? `${minutos} minuto${minutos > 1 ? "s" : ""} de aula assistidos`
-                : "a aula começou agora"}
-            </p>
           </div>
           <div className="flex items-center gap-3">
             <HwAvatar
