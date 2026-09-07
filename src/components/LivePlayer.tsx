@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { elapsedSeconds, postLiveOfferOpen, POST_LIVE_OFFER_UNTIL } from "@/lib/time";
 import {
   getRecordedPlaybackPosition,
@@ -85,11 +85,35 @@ type WebkitFullscreenElement = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void> | void;
 };
 
+/** Deitar a tela por API existe no Chrome/Android, mas o Safari nunca
+ *  implementou — por isso `lock` nem está no lib.dom desta versão do TS.
+ *  Tipamos só o que usamos e chamamos com `?.`. */
+type LockableOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape") => Promise<void>;
+  unlock?: () => void;
+};
+
 /** Segundos de "<apresentador> está se conectando…" no início da transmissão. */
 const CONNECTING_SECONDS = 6;
 
 /** Tempo parado até a barra de volume/tela cheia sumir de novo. */
 const CONTROLS_IDLE_MS = 2800;
+
+/* ---- Orientação do aparelho (para a tela cheia deitada no celular) ---- */
+
+function subscribeToOrientation(onStoreChange: () => void) {
+  const query = window.matchMedia("(orientation: portrait)");
+  query.addEventListener("change", onStoreChange);
+  return () => query.removeEventListener("change", onStoreChange);
+}
+
+function getPortraitSnapshot() {
+  return window.matchMedia("(orientation: portrait)").matches;
+}
+
+function getServerPortraitSnapshot() {
+  return false;
+}
 
 /** Folga aceita entre o vídeo e o ponto da transmissão antes de voltar o
  *  ponteiro. Cobre o "nudge" do hls.js sem deixar passar uma busca real. */
@@ -197,6 +221,20 @@ export function LivePlayer({
   // tela inteira troca e a rolagem da página precisa voltar.
   const overlayFullscreen = cssFullscreen && phase === "live";
   const isFullscreen = nativeFullscreen || overlayFullscreen;
+  const portrait = useSyncExternalStore(
+    subscribeToOrientation,
+    getPortraitSnapshot,
+    getServerPortraitSnapshot
+  );
+  /**
+   * iPhone em pé: o Safari nunca implementou `screen.orientation.lock`, então
+   * não dá para virar a tela por API — e a nossa tela cheia ali é por CSS, sem
+   * tela cheia nativa para travar. Giramos o player 90°: a pessoa vira o
+   * aparelho e vê o vídeo deitado ocupando tudo, inclusive com a trava de
+   * rotação do sistema ligada, que é o caso de boa parte do público. Se o
+   * aparelho girar de verdade, a rotação sai e o layout deitado vale sozinho.
+   */
+  const rotatedFullscreen = overlayFullscreen && portrait;
   // A barra de volume/tela cheia fica escondida: aparece com o mouse sobre o
   // player ou no toque, e some sozinha depois de um tempo parado.
   const [controlsVisible, setControlsVisible] = useState(false);
@@ -342,12 +380,35 @@ export function LivePlayer({
     return Boolean(playerRef.current) && target === playerRef.current;
   }, []);
 
+  /**
+   * Android/Chrome: com a tela cheia nativa aberta dá para deitar a tela por
+   * API. O Safari (iPhone e desktop) nunca implementou `lock` — lá a promessa
+   * rejeita e a tela cheia por CSS resolve girando o player. Desktop também
+   * rejeita, e é isso que queremos: nada acontece.
+   */
+  async function lockLandscape() {
+    try {
+      await (screen.orientation as LockableOrientation).lock?.("landscape");
+    } catch {
+      // Sem suporte (Safari) ou sem permissão: segue em pé, sem quebrar nada.
+    }
+  }
+
+  function unlockOrientation() {
+    try {
+      (screen.orientation as LockableOrientation).unlock?.();
+    } catch {
+      // Idem: onde não dá para travar, também não há o que destravar.
+    }
+  }
+
   async function toggleFullscreen() {
     const player = playerRef.current as WebkitFullscreenElement | null;
     if (!player) return;
     const webkitDocument = document as WebkitFullscreenDocument;
 
     if (isNativeFullscreen()) {
+      unlockOrientation();
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen();
       } else if (webkitDocument.webkitFullscreenElement && webkitDocument.webkitExitFullscreen) {
@@ -366,10 +427,12 @@ export function LivePlayer({
     try {
       if (typeof player.requestFullscreen === "function") {
         await player.requestFullscreen();
+        await lockLandscape();
         return;
       }
       if (typeof player.webkitRequestFullscreen === "function") {
         await player.webkitRequestFullscreen();
+        await lockLandscape();
         return;
       }
     } catch {
@@ -387,6 +450,9 @@ export function LivePlayer({
       const active = isNativeFullscreen();
       setNativeFullscreen(active);
       if (active) setCssFullscreen(false);
+      // Saiu pelo Esc, pelo botão do sistema ou pelo gesto: devolve a rotação
+      // ao aparelho, senão a página seguiria deitada fora da tela cheia.
+      if (!active) unlockOrientation();
       // Entrar ou sair (inclusive pelo Esc) remonta o player: mostra a barra
       // uma vez para o botão de sair não ficar escondido.
       revealControls();
@@ -821,12 +887,28 @@ export function LivePlayer({
              O tamanho vai explícito (h/w-dvh) porque a margem do `space-y-4`
              encolheria uma caixa fixa de altura automática. */
           className={`overflow-hidden bg-black ${
-            overlayFullscreen
-              ? "fixed inset-0 z-50 h-dvh w-dvw rounded-none"
-              : nativeFullscreen
-                ? "relative h-dvh w-dvw rounded-none"
-                : "relative aspect-video rounded-2xl"
+            rotatedFullscreen
+              ? "fixed left-0 top-0 z-50 rounded-none"
+              : overlayFullscreen
+                ? "fixed inset-0 z-50 h-dvh w-dvw rounded-none"
+                : nativeFullscreen
+                  ? "relative h-dvh w-dvw rounded-none"
+                  : "relative aspect-video rounded-2xl"
           }`}
+          /* Deitado: a caixa recebe as medidas trocadas e gira 90° a partir do
+             canto superior esquerdo. O `translateY(-100%)` (aplicado ANTES da
+             rotação) traz a caixa de volta para dentro da tela, cobrindo-a
+             exatamente. */
+          style={
+            rotatedFullscreen
+              ? {
+                  width: "100dvh",
+                  height: "100dvw",
+                  transform: "rotate(90deg) translateY(-100%)",
+                  transformOrigin: "top left",
+                }
+              : undefined
+          }
           /* Mouse: a barra segue o ponteiro sobre o player. Toque: um toque
              na área do vídeo mostra, outro esconde. */
           onPointerEnter={(event) => {
@@ -953,9 +1035,11 @@ export function LivePlayer({
                 controlsVisible ? "opacity-100" : "pointer-events-none opacity-0"
               }`}
               /* Na tela cheia por CSS (iPhone) a barra sobe acima do indicador
-                 de home — senão o botão de sair fica fora do alcance. */
+                 de home — senão o botão de sair fica fora do alcance. Girada,
+                 a área segura aponta para outro lado do aparelho e o ajuste
+                 deixa de fazer sentido. */
               style={
-                overlayFullscreen
+                overlayFullscreen && !rotatedFullscreen
                   ? { bottom: "max(0.75rem, env(safe-area-inset-bottom))" }
                   : undefined
               }
