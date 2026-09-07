@@ -138,6 +138,14 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A re-inscrição automática da semana falhou: a pessoa entraria sem existir
+   *  como lead, então precisa de um caminho para tentar de novo. */
+  const [sessionFailed, setSessionFailed] = useState(false);
+  /** Contador que refaz a tentativa quando a pessoa toca em "tentar de novo". */
+  const [sessionRetry, setSessionRetry] = useState(0);
+  /** Quantidade de dígitos já digitados no telefone (o campo segue não
+   *  controlado — isto só alimenta o aviso de DDD faltando). */
+  const [phoneDigits, setPhoneDigits] = useState(0);
 
   const tz = webinar.timezone;
   const supportWhatsapp = supportWhatsAppNumber(webinar.integrations);
@@ -210,21 +218,29 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
       ...browserLeadSource(),
     })
       .then((r) => {
-        if (cancelled || !r.ok) return;
+        if (cancelled) return;
+        // Falha aqui significava a pessoa assistindo à aula sem existir como
+        // lead: sem nome, sem e-mail, sem telefone, contada como anônima. Ela
+        // não via erro e o painel também não. Agora fica registrado para o
+        // aviso na sala, que oferece tentar de novo.
+        if (!r.ok) return setSessionFailed(true);
         const s = { iso: r.scheduledStartAtIso, token: r.token };
         setSession(s);
+        setSessionFailed(false);
         try {
           localStorage.setItem(sessionKey, JSON.stringify(s));
         } catch {
           /* ignore */
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setSessionFailed(true);
+      });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, person, sessionIsToday, windowOpen, startIso]);
+  }, [mounted, person, sessionIsToday, windowOpen, startIso, sessionRetry]);
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -239,29 +255,38 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
 
     setPending(true);
     const { date, time } = zonedParts(startMs, tz);
-    const r = await registerForSession({
-      webinarId: webinar.id,
-      name,
-      email,
-      phone,
-      date,
-      time,
-      ...browserLeadSource(),
-    });
-    setPending(false);
+    let r: Awaited<ReturnType<typeof registerForSession>>;
+    try {
+      r = await registerForSession({
+        webinarId: webinar.id,
+        name,
+        email,
+        phone,
+        date,
+        time,
+        ...browserLeadSource(),
+      });
+    } catch {
+      // Sem isto, uma queda de rede (4G oscilando, elevador, metrô) matava a
+      // função no `await`: `setPending(false)` nunca rodava e o botão ficava
+      // preso em "Confirmando…" para sempre, sem mensagem nenhuma.
+      return setError("Não foi possível enviar. Confira sua conexão e toque de novo.");
+    } finally {
+      setPending(false);
+    }
     if (!r.ok) return setError(r.error);
 
     const p = { name, email, phone };
     const s = { iso: r.scheduledStartAtIso, token: r.token };
     setPerson(p);
     setSession(s);
+    setSessionFailed(false);
     try {
       localStorage.setItem(cacheKey, JSON.stringify(p));
       localStorage.setItem(sessionKey, JSON.stringify(s));
     } catch {
       /* ignore */
     }
-
   }
 
   const brandName = webinar.presenter_name || displayTitle(webinar.title);
@@ -393,35 +418,51 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   // ---- Dia do evento + cadastrado (ou ENTRADA LIVRE) → vai direto pra sala ----
   if (!draftView && (person || freeEntry)) {
     return (
-      <LivePlayer
-        title={webinar.title}
-        presenterName={webinar.presenter_name}
-        presenterAvatarUrl={webinar.presenter_avatar_url}
-        brandName={brandName}
-        logoUrl={webinar.logo_url}
-        webinarId={webinar.id}
-        registrationToken={token}
-        resumeProgressEnabled={webinar.resume_progress_enabled}
-        viewerName={person?.name ?? null}
-        supportWhatsapp={supportWhatsapp}
-        thankYouPath={`/obrigado/${webinar.slug}`}
-        videoUrl={videoUrl}
-        durationSeconds={webinar.duration_seconds}
-        scheduledStartAtIso={startIso}
-        timezone={tz}
-        messages={messages}
-        offers={offers}
-        sales={sales}
-        salesTitle={webinar.sales_notification_title}
-        autoplay={webinar.video_autoplay}
-        fullscreen={webinar.video_fullscreen}
-        audience={{
-          enabled: webinar.audience_enabled,
-          mode: webinar.audience_mode,
-          min: webinar.audience_min,
-          max: webinar.audience_max,
-        }}
-      />
+      <>
+        {/* Só aparece quando a inscrição desta turma não foi confirmada: sem
+            ela a pessoa assiste como anônima e some do seu funil. */}
+        {sessionFailed && !token && (
+          <div className="sticky top-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-[var(--hw-red)] px-4 py-2.5 text-center text-[13px] font-medium text-white">
+            <span>Não conseguimos confirmar sua inscrição nesta aula.</span>
+            <button
+              type="button"
+              onClick={() => setSessionRetry((n) => n + 1)}
+              className="rounded-full bg-white/20 px-3 py-1 font-semibold underline-offset-2 hover:bg-white/30"
+            >
+              Tentar de novo
+            </button>
+          </div>
+        )}
+        <LivePlayer
+          title={webinar.title}
+          presenterName={webinar.presenter_name}
+          presenterAvatarUrl={webinar.presenter_avatar_url}
+          brandName={brandName}
+          logoUrl={webinar.logo_url}
+          webinarId={webinar.id}
+          registrationToken={token}
+          resumeProgressEnabled={webinar.resume_progress_enabled}
+          viewerName={person?.name ?? null}
+          supportWhatsapp={supportWhatsapp}
+          thankYouPath={`/obrigado/${webinar.slug}`}
+          videoUrl={videoUrl}
+          durationSeconds={webinar.duration_seconds}
+          scheduledStartAtIso={startIso}
+          timezone={tz}
+          messages={messages}
+          offers={offers}
+          sales={sales}
+          salesTitle={webinar.sales_notification_title}
+          autoplay={webinar.video_autoplay}
+          fullscreen={webinar.video_fullscreen}
+          audience={{
+            enabled: webinar.audience_enabled,
+            mode: webinar.audience_mode,
+            min: webinar.audience_min,
+            max: webinar.audience_max,
+          }}
+        />
+      </>
     );
   }
 
@@ -527,6 +568,9 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
                 type="email"
                 required
                 autoComplete="email"
+                /* O teclado do iPhone capitaliza a primeira letra por padrão. */
+                autoCapitalize="none"
+                spellCheck={false}
                 placeholder="voce@email.com"
                 className={hwInput}
               />
@@ -539,9 +583,17 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
                 required
                 autoComplete="tel"
                 inputMode="tel"
+                onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, "").length)}
                 placeholder="(11) 99999-9999"
                 className={hwInput}
               />
+              {/* Sem DDD o número passa na validação, mas o disparo nunca chega
+                  nessa pessoa: ela se inscreve e some. Avisa sem bloquear. */}
+              {phoneDigits > 0 && phoneDigits < 11 && (
+                <p className="mt-1.5 text-[13px] text-[var(--hw-muted)]">
+                  Confirme o DDD — sem ele o link não chega no seu WhatsApp.
+                </p>
+              )}
             </div>
 
             {error && (

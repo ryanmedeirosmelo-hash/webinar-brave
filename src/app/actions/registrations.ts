@@ -261,6 +261,21 @@ export async function createRegistration(
   const err = validateSession(webinar, date, time, scheduledStartAt, false, true);
   if (err) return { error: err };
 
+  // Idempotência: mesma pessoa + mesma sessão → reaproveita a inscrição, como o
+  // fluxo recorrente já faz. No celular o envio duplicado é rotina — a pessoa
+  // toca, a rede demora, a tela não muda e ela toca de novo. Sem isso, cada
+  // toque virava um lead novo, um token novo e mais um disparo de WhatsApp.
+  const { data: existing } = await supabase
+    .from("registrations")
+    .select("access_token")
+    .eq("webinar_id", webinar.id)
+    .eq("email", email)
+    .eq("scheduled_start_at", scheduledStartAt.toISOString())
+    .limit(1)
+    .maybeSingle<{ access_token: string }>();
+
+  if (existing?.access_token) redirect(`/watch/${existing.access_token}`);
+
   const { data: reg, error: rErr } = await storeRegistration(
     webinar,
     { name, email, phone: phone || null, scheduledStartAt },
