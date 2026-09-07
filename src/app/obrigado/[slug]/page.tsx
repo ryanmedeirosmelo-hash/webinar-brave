@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { displayTitle } from "@/components/Brand";
-import { HwAvatar, HwPage } from "@/components/HwKit";
+import { HwPage } from "@/components/HwKit";
 import { SupportBox } from "@/components/SupportBox";
 import { TimedOffer } from "@/components/TimedOffer";
 import { supabaseAdmin } from "@/lib/supabase/server";
@@ -118,48 +117,7 @@ export default async function ThankYouPage({
             </section>
           )}
 
-          <div className="mt-10 overflow-hidden rounded-3xl border border-[var(--hw-border)] bg-[var(--hw-surface)] shadow-[0_24px_70px_-42px_rgba(15,23,42,0.42)]">
-            <div className="border-b border-[var(--hw-border)] bg-[var(--hw-bg-soft)] px-6 py-4">
-              <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--hw-red)]">
-                Próximo passo
-              </p>
-              <h2 className="mt-1 text-lg font-bold tracking-tight text-[var(--hw-text)]">
-                Fique de olho no seu e-mail.
-              </h2>
-            </div>
-            <div className="space-y-6 px-6 py-6">
-              <p className="text-[15px] leading-6 text-[var(--hw-muted)]">
-                Enviaremos o acesso e os próximos avisos por lá. Enquanto isso, você pode voltar à
-                página do webinar quando quiser.
-              </p>
-
-              {presenterName && (
-                <div className="flex items-center gap-3 rounded-2xl bg-[var(--hw-bg-soft)] p-3">
-                  <HwAvatar
-                    name={presenterName}
-                    size={40}
-                    presenterName={presenterName}
-                    presenterAvatarUrl={webinar.presenter_avatar_url}
-                  />
-                  <div>
-                    <p className="text-[11px] font-medium uppercase tracking-wider text-[var(--hw-muted)]">
-                      Sua aula será conduzida por
-                    </p>
-                    <p className="font-semibold text-[var(--hw-text)]">{presenterName}</p>
-                  </div>
-                </div>
-              )}
-
-              <Link
-                href={`/${webinar.slug}`}
-                className="inline-flex w-full items-center justify-center rounded-full bg-[var(--hw-red)] px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-[var(--hw-red-hover)] active:scale-[0.99]"
-              >
-                Ver próximos horários
-              </Link>
-            </div>
-          </div>
-
-          <div className="mt-5">
+          <div className="mt-10">
             <SupportBox whatsapp={supportWhatsAppNumber(webinar.integrations)} />
           </div>
         </section>
