@@ -90,7 +90,7 @@ export default async function StepVideo({
             name="resume_progress_enabled"
             defaultChecked={w.resume_progress_enabled}
             label="Permitir continuidade individual da aula"
-            hint="Cada pessoa volta do ponto em que parou, mesmo depois do término da turma. Desligado, todos acompanham a mesma cronologia da live."
+            hint="Ligado: cada pessoa volta do ponto em que parou, mesmo depois do término da turma — quem se ausenta não perde nada. Desligado: todos acompanham a mesma cronologia da live, e quem se ausenta volta no ponto em que a turma está, como numa transmissão de verdade."
           />
         </div>
 
