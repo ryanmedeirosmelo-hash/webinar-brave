@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
+import { unstable_rethrow } from "next/navigation";
 import { createRegistration, type RegistrationState } from "@/app/actions/registrations";
 import { jitSlots, recurrenceSlots, zonedParts, type JitSlot } from "@/lib/time";
 import { COUNTRIES } from "@/lib/countries";
@@ -126,6 +127,45 @@ function ChevronIcon() {
   );
 }
 
+/** Mensagem única para "a requisição não chegou ao servidor". */
+const NETWORK_ERROR = "Não foi possível enviar. Confira sua conexão e toque de novo.";
+
+/**
+ * O estado carrega de volta o que a pessoa digitou. O React 19 zera o
+ * formulário assim que a action termina — inclusive quando ela termina em erro
+ * — então, sem devolver os valores, qualquer falha obrigava a redigitar nome e
+ * e-mail no celular. É aí que a pessoa desiste.
+ */
+type FormState = { error?: string; values?: { name: string; email: string } } | undefined;
+
+/**
+ * A action só devolve `{ error }` quando a requisição CHEGA ao servidor. Se a
+ * rede cai no meio — 4G oscilando, elevador, metrô — a promessa é rejeitada, e
+ * sem nenhuma error boundary no projeto a página inteira ia junto, levando tudo
+ * que a pessoa digitou. Aqui a falha vira mensagem no próprio formulário: os
+ * campos não são controlados, então o que ela preencheu continua na tela.
+ *
+ * `unstable_rethrow` deixa passar os erros do próprio Next — o `redirect` do
+ * caminho feliz é um deles.
+ */
+async function submitRegistration(
+  previous: FormState,
+  formData: FormData
+): Promise<FormState> {
+  // O telefone é controlado por estado e sobrevive sozinho; nome e e-mail não.
+  const values = {
+    name: String(formData.get("name") ?? ""),
+    email: String(formData.get("email") ?? ""),
+  };
+  try {
+    const result: RegistrationState = await createRegistration(previous, formData);
+    return result ? { ...result, values } : result;
+  } catch (error) {
+    unstable_rethrow(error);
+    return { error: NETWORK_ERROR, values };
+  }
+}
+
 function includeLeadSource(form: HTMLFormElement) {
   const set = (name: string, value: string) => {
     const input = form.querySelector<HTMLInputElement>(`input[name="${name}"]`);
@@ -152,8 +192,8 @@ export function SignupForm({
   buttonColor,
   buttonTextColor,
 }: Props) {
-  const [state, formAction, pending] = useActionState<RegistrationState, FormData>(
-    createRegistration,
+  const [state, formAction, pending] = useActionState<FormState, FormData>(
+    submitRegistration,
     undefined
   );
 
@@ -216,6 +256,10 @@ export function SignupForm({
   const [countryId, setCountryId] = useState("br");
   const [phone, setPhone] = useState("");
   const countryCode = COUNTRIES.find((country) => country.id === countryId)?.code ?? "+55";
+  // Celular brasileiro tem 11 dígitos com DDD. Só avisa depois que a pessoa
+  // começou a digitar — não recebe o lead com um erro antes da primeira tecla.
+  const phoneIncomplete =
+    countryCode === "+55" && phone.length > 0 && phone.replace(/\D/g, "").length < 11;
 
   const enabled = useMemo(() => {
     const byKey = new Map((formFields ?? []).map((f) => [f.key, f]));
@@ -357,6 +401,8 @@ export function SignupForm({
             name="name"
             required
             autoComplete="name"
+            /* Repõe o que foi digitado quando a action volta com erro. */
+            defaultValue={state?.values?.name ?? ""}
             placeholder={FIELD_DEFAULTS.name.placeholder}
             className={capInput}
           />
@@ -374,6 +420,10 @@ export function SignupForm({
             type="email"
             required
             autoComplete="email"
+            defaultValue={state?.values?.email ?? ""}
+            /* O teclado do iPhone capitaliza a primeira letra por padrão. */
+            autoCapitalize="none"
+            spellCheck={false}
             placeholder={FIELD_DEFAULTS.email.placeholder}
             className={capInput}
           />
@@ -417,6 +467,13 @@ export function SignupForm({
               className={`${capInput} min-w-0 flex-1`}
             />
           </div>
+          {/* Sem DDD o número passa na validação, mas o disparo nunca chega
+              nessa pessoa: ela se inscreve e some. Avisa sem bloquear. */}
+          {phoneIncomplete && (
+            <p className="mt-1.5 text-[13px] text-[color:var(--cap-muted)]">
+              Confirme o DDD — sem ele o link não chega no seu WhatsApp.
+            </p>
+          )}
         </div>
       )}
 
