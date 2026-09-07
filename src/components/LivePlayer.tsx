@@ -95,6 +95,11 @@ const CONTROLS_IDLE_MS = 2800;
  *  ponteiro. Cobre o "nudge" do hls.js sem deixar passar uma busca real. */
 const SEEK_TOLERANCE_SECONDS = 1.5;
 
+/** Atraso tolerado entre o vídeo e o relógio da turma antes de saltar para o
+ *  ponto ao vivo. Curto o bastante para a oferta não chegar antes da fala,
+ *  largo o bastante para não corrigir a cada engasgo de buffer. */
+const DRIFT_TOLERANCE_SECONDS = 2;
+
 function phaseFor(elapsed: number, duration: number): Phase {
   if (elapsed < 0) return "before";
   if (elapsed >= duration) return "ended";
@@ -195,6 +200,8 @@ export function LivePlayer({
   // A barra de volume/tela cheia fica escondida: aparece com o mouse sobre o
   // player ou no toque, e some sozinha depois de um tempo parado.
   const [controlsVisible, setControlsVisible] = useState(false);
+  /** A reprodução parou e o próprio player não conseguiu retomar sozinho. */
+  const [paused, setPaused] = useState(false);
   const hideControlsRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Libera a única busca que o próprio player faz (posicionar a aula). */
   const allowSeekRef = useRef(false);
@@ -225,6 +232,12 @@ export function LivePlayer({
     []
   );
 
+  /**
+   * Modo relógio: a cronologia da turma (chat, oferta, encerramento) vem do
+   * horário da sessão, não do vídeo de cada pessoa. É o padrão do produto.
+   */
+  const clockDriven = !previewMode && !draftMode && !resumeProgressEnabled;
+
   const progressStorageKey =
     previewMode || draftMode || !resumeProgressEnabled
       ? null
@@ -244,9 +257,15 @@ export function LivePlayer({
       playbackPositionRef.current = next;
       desiredPositionRef.current = next;
       const storedPosition = Math.floor(next);
-      setElapsed((previous) =>
-        Math.floor(previous) === storedPosition ? previous : next
-      );
+      // No modo relógio quem manda na linha do tempo é o horário da turma: se o
+      // vídeo também escrevesse aqui, chat e oferta ficariam oscilando entre as
+      // duas fontes a cada segundo enquanto houvesse atraso. O ponto do vídeo
+      // segue alimentando a trava de busca e o heartbeat pelos refs acima.
+      if (!clockDriven) {
+        setElapsed((previous) =>
+          Math.floor(previous) === storedPosition ? previous : next
+        );
+      }
 
       if (
         persist &&
@@ -264,8 +283,31 @@ export function LivePlayer({
       if (durationSeconds > 0 && next >= durationSeconds) setPhase("ended");
       return next;
     },
-    [durationSeconds, progressStorageKey]
+    [clockDriven, durationSeconds, progressStorageKey]
   );
+
+  /**
+   * Traz o vídeo de volta para o ponto da turma no modo relógio.
+   *
+   * No celular a reprodução é interrompida o tempo todo — tela bloqueada,
+   * ligação, troca de app, rebuffer no 4G — e cada interrupção deixava o vídeo
+   * atrasado PARA SEMPRE, enquanto chat, oferta e encerramento seguiam o
+   * relógio. A pessoa via a oferta antes da fala e era mandada para a tela de
+   * encerrado ainda no meio da aula, sem nunca chegar no fechamento.
+   *
+   * Só adianta: nunca volta atrás, que é a regra do simulated live.
+   */
+  const syncToLiveClock = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !clockDriven || video.readyState < 1) return;
+    const target = clampPosition(elapsedSeconds(scheduledStartAtIso), durationSeconds);
+    // A aula já acabou no relógio: quem encerra é a fase, não um salto para o fim.
+    if (durationSeconds > 0 && target >= durationSeconds) return;
+    if (target - video.currentTime <= DRIFT_TOLERANCE_SECONDS) return;
+    // A trava de busca desfaria a correção: esta é uma busca do próprio player.
+    allowSeekRef.current = true;
+    video.currentTime = target;
+  }, [clockDriven, durationSeconds, scheduledStartAtIso]);
 
   function setPlayerVolume(nextVolume: number) {
     const next = Math.min(1, Math.max(0, nextVolume));
@@ -544,6 +586,10 @@ export function LivePlayer({
             enableWorker: true,
             maxBufferLength: 30,
             maxMaxBufferLength: 120,
+            // No celular o player tem ~390px de largura: sem teto, o ABR sobe
+            // para 1080p+, queima o pacote de dados do lead e trava no 4G — e
+            // cada travada vira atraso na aula.
+            capLevelToPlayerSize: true,
           });
           inst.loadSource(videoUrl);
           inst.attachMedia(v);
@@ -592,10 +638,21 @@ export function LivePlayer({
 
     // Sem controles o visitante não busca/põe em pausa. Mantemos a proteção
     // contra atalhos que possam pausar o elemento nativo.
+    //
+    // Quando a retomada é REJEITADA — no iPhone isso acontece depois de uma
+    // ligação, de outra interrupção da sessão de áudio ou no Modo de Baixo
+    // Consumo — o vídeo ficava congelado sem nenhum botão na tela, e a única
+    // saída era recarregar a página. Aí marcamos `paused` e oferecemos o toque.
     const onPause = () => {
-      if (phase === "live" && !video.ended) video.play().catch(() => {});
+      if (phase !== "live" || video.ended) return;
+      video.play().then(
+        () => setPaused(false),
+        () => setPaused(true)
+      );
     };
+    const onPlaying = () => setPaused(false);
     video.addEventListener("pause", onPause);
+    video.addEventListener("playing", onPlaying);
 
     // Nem avança nem volta: uma aula ao vivo não tem barra de progresso. Vale
     // para toda origem de busca que não passa pela página — teclas de mídia,
@@ -617,9 +674,31 @@ export function LivePlayer({
     return () => {
       video.removeEventListener("canplay", resume);
       video.removeEventListener("pause", onPause);
+      video.removeEventListener("playing", onPlaying);
       video.removeEventListener("seeking", onSeeking);
     };
   }, [durationSeconds, phase, previewMode]);
+
+  // Modo relógio: mantém o vídeo junto da turma. Além do tique de 1s, corrige
+  // no instante em que a pessoa volta para a aba e a cada retomada da
+  // reprodução — que é quando o atraso do celular aparece.
+  useEffect(() => {
+    if (!clockDriven || phase !== "live") return;
+    const video = videoRef.current;
+    if (!video) return;
+    syncToLiveClock();
+    const id = setInterval(syncToLiveClock, 1000);
+    const onVisibility = () => {
+      if (!document.hidden) syncToLiveClock();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    video.addEventListener("playing", syncToLiveClock);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisibility);
+      video.removeEventListener("playing", syncToLiveClock);
+    };
+  }, [clockDriven, phase, syncToLiveClock]);
 
   // O painel de mídia do sistema (teclas de mídia, central do navegador) traz
   // avançar/voltar próprios. Handlers vazios tiram a ação antes de ela virar
@@ -842,6 +921,28 @@ export function LivePlayer({
             >
               <span className="flex animate-pulse items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[16px] font-bold text-[#0f0f0f] shadow-2xl">
                 🔊 Clique para ouvir o áudio
+              </span>
+            </button>
+          )}
+
+          {/* Reprodução travada: o overlay de áudio já cobre o caso do vídeo
+              mudo, então este só aparece para quem já liberou o som. Ao voltar,
+              a aula pega o ponto da turma — não o ponto onde travou. */}
+          {videoUrl && !connecting && !previewMode && paused && !muted && (
+            <button
+              onClick={() => {
+                const video = videoRef.current;
+                if (!video) return;
+                video.play().then(() => {
+                  setPaused(false);
+                  syncToLiveClock();
+                }, () => {});
+              }}
+              className="absolute inset-0 z-10 grid cursor-pointer place-items-center bg-black/50 backdrop-blur-[1px]"
+              aria-label="Continuar assistindo"
+            >
+              <span className="flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[16px] font-bold text-[#0f0f0f] shadow-2xl">
+                ▶ Toque para continuar
               </span>
             </button>
           )}
