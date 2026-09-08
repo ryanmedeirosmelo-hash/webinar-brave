@@ -8,7 +8,7 @@ import {
   recordAnonHeartbeat,
 } from "@/app/actions/heartbeat";
 import { SimulatedChat } from "./SimulatedChat";
-import { TimedOffer } from "./TimedOffer";
+import { findVisibleOffer, TimedOffer } from "./TimedOffer";
 import { SupportBox } from "./SupportBox";
 import { displayTitle } from "./Brand";
 import {
@@ -84,6 +84,41 @@ type WebkitFullscreenDocument = Document & {
 type WebkitFullscreenElement = HTMLElement & {
   webkitRequestFullscreen?: () => Promise<void> | void;
 };
+
+/** Nem todo navegador expõe `lock` na API de orientação (notadamente Safari
+ * no iPhone). Mantemos a API opcional para o player continuar funcionando sem
+ * forçar um comportamento inexistente. */
+type LockableScreenOrientation = ScreenOrientation & {
+  lock?: (orientation: "landscape" | "portrait-primary") => Promise<void>;
+};
+
+type SidePanelTab = "chat" | "offer";
+
+function screenOrientation(): LockableScreenOrientation | null {
+  if (typeof screen === "undefined") return null;
+  return (screen.orientation as LockableScreenOrientation | undefined) ?? null;
+}
+
+/** Orientação é um aperfeiçoamento: há navegadores que a bloqueiam mesmo em
+ * tela cheia. A tela cheia continua útil nesses casos e não exibimos erro ao
+ * espectador. */
+async function lockLandscapeOrientation() {
+  const orientation = screenOrientation();
+  if (typeof orientation?.lock !== "function") return;
+  try {
+    await orientation.lock("landscape");
+  } catch {
+    // iPhone/Safari e alguns browsers bloqueiam a API de orientação.
+  }
+}
+
+function unlockScreenOrientation() {
+  try {
+    screenOrientation()?.unlock();
+  } catch {
+    // Não há nada a recuperar quando o browser não aceita a API.
+  }
+}
 
 /** Segundos de "<apresentador> está se conectando…" no início da transmissão. */
 const CONNECTING_SECONDS = 6;
@@ -202,6 +237,9 @@ export function LivePlayer({
   const [controlsVisible, setControlsVisible] = useState(false);
   /** A reprodução parou e o próprio player não conseguiu retomar sozinho. */
   const [paused, setPaused] = useState(false);
+  // A oferta assume este mesmo espaço quando é liberada. Quem quiser continuar
+  // acompanhando as mensagens pode voltar ao chat sem sair da aula.
+  const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>("chat");
   const hideControlsRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Libera a única busca que o próprio player faz (posicionar a aula). */
   const allowSeekRef = useRef(false);
@@ -342,10 +380,12 @@ export function LivePlayer({
     return Boolean(playerRef.current) && target === playerRef.current;
   }, []);
 
-  async function toggleFullscreen() {
-    const player = playerRef.current as WebkitFullscreenElement | null;
-    if (!player) return;
+  /** Devolve a tela ao estado normal e libera a orientação que foi travada ao
+   * entrar em fullscreen. Assim, quando a oferta abre, a página volta ao
+   * layout vertical normal antes de mostrar o CTA. */
+  const exitPlayerFullscreen = useCallback(async () => {
     const webkitDocument = document as WebkitFullscreenDocument;
+    unlockScreenOrientation();
 
     if (isNativeFullscreen()) {
       if (document.fullscreenElement && document.exitFullscreen) {
@@ -356,8 +396,20 @@ export function LivePlayer({
       return;
     }
 
+    if (cssFullscreen) setCssFullscreen(false);
+  }, [cssFullscreen, isNativeFullscreen]);
+
+  async function toggleFullscreen() {
+    const player = playerRef.current as WebkitFullscreenElement | null;
+    if (!player) return;
+
+    if (isNativeFullscreen()) {
+      await exitPlayerFullscreen();
+      return;
+    }
+
     if (cssFullscreen) {
-      setCssFullscreen(false);
+      await exitPlayerFullscreen();
       return;
     }
 
@@ -366,10 +418,12 @@ export function LivePlayer({
     try {
       if (typeof player.requestFullscreen === "function") {
         await player.requestFullscreen();
+        await lockLandscapeOrientation();
         return;
       }
       if (typeof player.webkitRequestFullscreen === "function") {
         await player.webkitRequestFullscreen();
+        await lockLandscapeOrientation();
         return;
       }
     } catch {
@@ -380,6 +434,7 @@ export function LivePlayer({
     // nativo abriria o player do iOS com controles de pausa e busca. Ocupamos a
     // viewport por CSS, mantendo a aula sem nenhum controle de reprodução.
     setCssFullscreen(true);
+    await lockLandscapeOrientation();
   }
 
   useEffect(() => {
@@ -387,6 +442,7 @@ export function LivePlayer({
       const active = isNativeFullscreen();
       setNativeFullscreen(active);
       if (active) setCssFullscreen(false);
+      if (!active) unlockScreenOrientation();
       // Entrar ou sair (inclusive pelo Esc) remonta o player: mostra a barra
       // uma vez para o botão de sair não ficar escondido.
       revealControls();
@@ -405,7 +461,10 @@ export function LivePlayer({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setCssFullscreen(false);
+      if (event.key === "Escape") {
+        unlockScreenOrientation();
+        setCssFullscreen(false);
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => {
@@ -735,6 +794,20 @@ export function LivePlayer({
   void accentColor; // cores vêm do tema do player (vermelho/branco)
   const brand = brandName || presenterName || title;
   const shownTitle = displayTitle(title);
+  // A oferta não é mais duplicada abaixo do vídeo: ela ocupa o mesmo painel do
+  // chat e, ao ser liberada, assume a aba automaticamente.
+  const visibleOffer = findVisibleOffer(offers, elapsed, { forceVisible: draftMode });
+  const visibleOfferId = visibleOffer?.id;
+
+  useEffect(() => {
+    if (!visibleOfferId) {
+      setSidePanelTab("chat");
+      return;
+    }
+
+    setSidePanelTab("offer");
+    if (isFullscreen) exitPlayerFullscreen().catch(() => {});
+  }, [exitPlayerFullscreen, isFullscreen, visibleOfferId]);
 
   const shell = (content: React.ReactNode, live?: boolean) => (
     <HwPage logoUrl={logoUrl} brandName={brand} presenterName={presenterName} live={live}>
@@ -855,7 +928,7 @@ export function LivePlayer({
                progresso próprias — a mesma brecha da tela cheia nativa. */
             disablePictureInPicture={!previewMode}
             onContextMenu={(e) => e.preventDefault()}
-            className={`h-full w-full object-contain ${previewMode ? "" : "pointer-events-none"}`}
+            className={`h-full w-full object-contain object-center ${previewMode ? "" : "pointer-events-none"}`}
             onTimeUpdate={(event) => updatePlaybackPosition(event.currentTarget.currentTime)}
             onEnded={() => {
               updatePlaybackPosition(durationSeconds);
@@ -1005,7 +1078,10 @@ export function LivePlayer({
                 className="h-1.5 w-20 cursor-pointer accent-[var(--hw-red)]"
                 aria-label="Volume"
               />
-              {fullscreen && (
+              {/* Enquanto a oferta está visível, o foco é o CTA no layout
+                  normal. Escondemos a entrada em fullscreen para a pessoa não
+                  voltar para uma tela onde a oferta ficaria fora de vista. */}
+              {fullscreen && !visibleOffer && (
                 <button
                   type="button"
                   onClick={() => toggleFullscreen().catch(() => {})}
@@ -1050,30 +1126,90 @@ export function LivePlayer({
           </div>
         </div>
 
-        <TimedOffer
-          offers={offers}
-          elapsed={elapsed}
-          webinarId={webinarId}
-          registrationToken={registrationToken}
-          sessionStartIso={scheduledStartAtIso}
-          previewMode={previewMode || draftMode}
-          forceVisible={draftMode}
-        />
       </div>
 
-      {/* Chat — ao lado no desktop, embaixo no mobile. Altura limitada com
-          scroll próprio para não empurrar a página nem tirar o vídeo da tela. */}
-      <div className="h-[60vh] min-h-[420px] lg:sticky lg:top-[72px] lg:h-[calc(100dvh-96px)]">
-        <SimulatedChat
-          messages={messages}
-          sales={sales}
-          salesTitle={salesTitle}
-          elapsed={elapsed}
-          viewerName={viewerName}
-          presenterName={presenterName}
-          presenterAvatarUrl={presenterAvatarUrl}
-          viewers={audience.enabled ? viewers : null}
-        />
+      {/* O painel lateral/abaixo preserva o espaço e o tamanho do chat. Quando
+          a oferta libera, ela toma esse mesmo lugar; Chat continua acessível
+          pela aba sem tirar a pessoa da transmissão. */}
+      <div className="flex h-[60vh] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-surface)] lg:sticky lg:top-[72px] lg:h-[calc(100dvh-96px)]">
+        <div
+          role="tablist"
+          aria-label="Painel da transmissão"
+          className="flex shrink-0 border-b border-[var(--hw-border)] p-1.5"
+        >
+          <button
+            type="button"
+            role="tab"
+            id="webinar-panel-chat-tab"
+            aria-selected={sidePanelTab === "chat"}
+            aria-controls="webinar-panel-chat"
+            onClick={() => setSidePanelTab("chat")}
+            className={`flex-1 rounded-lg px-3 py-2 text-[14px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--hw-red)] ${
+              sidePanelTab === "chat"
+                ? "bg-[var(--hw-chip)] text-[var(--hw-text)]"
+                : "text-[var(--hw-muted)] hover:text-[var(--hw-text)]"
+            }`}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            role="tab"
+            id="webinar-panel-offer-tab"
+            aria-selected={sidePanelTab === "offer"}
+            aria-controls="webinar-panel-offer"
+            disabled={!visibleOffer}
+            onClick={() => setSidePanelTab("offer")}
+            className={`flex-1 rounded-lg px-3 py-2 text-[14px] font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--hw-red)] ${
+              sidePanelTab === "offer"
+                ? "bg-[var(--hw-red)] text-white"
+                : visibleOffer
+                  ? "text-[var(--hw-muted)] hover:text-[var(--hw-text)]"
+                  : "cursor-not-allowed text-[var(--hw-muted)] opacity-60"
+            }`}
+          >
+            Oferta
+          </button>
+        </div>
+
+        {sidePanelTab === "offer" && visibleOffer ? (
+          <div
+            id="webinar-panel-offer"
+            role="tabpanel"
+            aria-labelledby="webinar-panel-offer-tab"
+            className="min-h-0 flex-1 overflow-y-auto p-3 sm:p-4"
+          >
+            <TimedOffer
+              offers={offers}
+              elapsed={elapsed}
+              webinarId={webinarId}
+              registrationToken={registrationToken}
+              sessionStartIso={scheduledStartAtIso}
+              previewMode={previewMode || draftMode}
+              forceVisible={draftMode}
+              stacked
+            />
+          </div>
+        ) : (
+          <div
+            id="webinar-panel-chat"
+            role="tabpanel"
+            aria-labelledby="webinar-panel-chat-tab"
+            className="min-h-0 flex-1"
+          >
+            <SimulatedChat
+              messages={messages}
+              sales={sales}
+              salesTitle={salesTitle}
+              elapsed={elapsed}
+              viewerName={viewerName}
+              presenterName={presenterName}
+              presenterAvatarUrl={presenterAvatarUrl}
+              viewers={audience.enabled ? viewers : null}
+              embedded
+            />
+          </div>
+        )}
       </div>
     </div>,
     true

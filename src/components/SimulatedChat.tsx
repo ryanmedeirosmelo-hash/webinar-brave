@@ -73,6 +73,7 @@ export function SimulatedChat({
   presenterName,
   presenterAvatarUrl,
   viewers,
+  embedded = false,
 }: {
   messages: ChatMessage[];
   sales: SalesNotification[];
@@ -84,6 +85,9 @@ export function SimulatedChat({
   presenterAvatarUrl?: string | null;
   /** Espectadores "assistindo agora" — mostrado no topo do chat. */
   viewers?: number | null;
+  /** Quando o chat está dentro do painel com abas, o contorno pertence ao
+   * painel externo — evita desenhar um segundo card dentro dele. */
+  embedded?: boolean;
 }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
@@ -126,7 +130,11 @@ export function SimulatedChat({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-surface)]">
+    <div
+      className={`flex h-full flex-col overflow-hidden bg-[var(--hw-surface)] ${
+        embedded ? "" : "rounded-2xl border border-[var(--hw-border)]"
+      }`}
+    >
       <div className="flex items-center justify-between border-b border-[var(--hw-border)] px-4 py-3">
         <span className="text-[15px] font-semibold">Chat ao vivo</span>
         <span className="rounded-full bg-[var(--hw-chip)] px-2.5 py-1 text-[12px] text-[var(--hw-muted)]">

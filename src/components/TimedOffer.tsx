@@ -15,6 +15,28 @@ function priceOffer(o: Offer): string | null {
   return null;
 }
 
+/** A mesma regra de visibilidade da oferta precisa ser usada pelo player para
+ * trocar o painel de chat pela oferta exatamente no segundo certo. */
+export function findVisibleOffer(
+  offers: Offer[],
+  elapsed: number,
+  { forceVisible = false, stacked = false }: { forceVisible?: boolean; stacked?: boolean } = {}
+): Offer | undefined {
+  return (
+    offers.find(
+      (o) =>
+        !o.disabled &&
+        elapsed >= o.show_at_seconds &&
+        (o.hide_at_seconds == null || o.hide_at_seconds === 0 || elapsed < o.hide_at_seconds)
+    ) ??
+    // Tela de "aula encerrada" (stacked): a aula acabou, então vale a última
+    // oferta cadastrada mesmo que o horário dela caia depois do fim da sala
+    // (ex.: oferta em 62min numa aula de 60min) — senão a condição prometida
+    // até as 22:00 simplesmente não aparece.
+    (stacked || forceVisible ? offers.filter((o) => !o.disabled).at(-1) : undefined)
+  );
+}
+
 export function TimedOffer({
   offers,
   elapsed,
@@ -40,18 +62,7 @@ export function TimedOffer({
   sessionStartIso?: string | null;
   previewMode?: boolean;
 }) {
-  const active =
-    offers.find(
-      (o) =>
-        !o.disabled &&
-        elapsed >= o.show_at_seconds &&
-        (o.hide_at_seconds == null || o.hide_at_seconds === 0 || elapsed < o.hide_at_seconds)
-    ) ??
-    // Tela de "aula encerrada" (stacked): a aula acabou, então vale a última
-    // oferta cadastrada mesmo que o horário dela caia depois do fim da sala
-    // (ex.: oferta em 62min numa aula de 60min) — senão a condição prometida
-    // até as 22:00 simplesmente não aparece.
-    (stacked || forceVisible ? offers.filter((o) => !o.disabled).at(-1) : undefined);
+  const active = findVisibleOffer(offers, elapsed, { forceVisible, stacked });
   if (!active) return null;
 
   const img = active.image_desktop_url ?? active.image_url;
