@@ -31,10 +31,10 @@ const FIELD_DEFAULTS: Record<FormField["key"], { label: string; placeholder: str
   whatsapp: { label: "WhatsApp", placeholder: "Seu telefone" },
 };
 
-const capLabel = "mb-1.5 block text-[13px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[14px] lg:mb-1.5";
+const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px] lg:mb-1.5";
 /** Sem largura: quem usa decide (o seletor de DDI é estreito, o resto ocupa tudo). */
 const capFieldBase =
-  "rounded-[11px] border border-[color:var(--cap-line)] bg-white px-4 py-3 text-[16px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-focus)] focus:ring-4 focus:ring-[color:var(--cap-focus-ring)] sm:py-[15px] sm:text-[15px] lg:py-3.5";
+  "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-3 text-[12px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:py-[15px] sm:text-[16px] lg:py-3.5";
 const capInput = `w-full ${capFieldBase}`;
 
 /** "13:30" → "13h30" (formato do print). */
@@ -207,9 +207,9 @@ export function SignupForm({
   const isWeekly =
     !isJit && recurrenceEnabled && recurrenceFreq === "weekly" && (recurrenceDays?.length ?? 0) > 0;
   const useSlots = isJit || isWeekly;
-  // A lista se refaz a cada segundo. No JIT, a sessão que acabou de começar
-  // continua elegível enquanto está ao vivo: o lead que clicou na virada do
-  // minuto entra nela, em vez de receber erro e precisar escolher de novo.
+  // A lista se refaz a cada segundo. A página de captura só oferece sessões
+  // futuras: no instante em que um horário começa, ele some e o próximo passa
+  // a ser a opção selecionada.
   const slotsAnchor = Math.floor(now / 1_000);
   const slots = useMemo<JitSlot[]>(() => {
     if (!useSlots || !slotsAnchor) return [];
@@ -233,13 +233,9 @@ export function SignupForm({
 
     // A mesma sessão pode coincidir com o intervalo (ex.: 20:00). Remove a
     // duplicata e mantém a lista cronológica.
-    return [
-      ...new Map(
-        generated
-          .filter((s) => (isJit ? s.startMs + durationSeconds * 1_000 > nowMs : s.startMs > nowMs))
-          .map((s) => [s.startMs, s])
-      ).values(),
-    ].sort((a, b) => a.startMs - b.startMs);
+    return [...new Map(generated.filter((s) => s.startMs > nowMs).map((s) => [s.startMs, s])).values()].sort(
+      (a, b) => a.startMs - b.startMs
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slotsAnchor, useSlots, isJit, jitIntervalMinutes, durationSeconds, timezone]);
 
@@ -268,11 +264,8 @@ export function SignupForm({
         const f = byKey.get(key);
         return {
           key,
-          // Nome e e-mail são obrigatórios no servidor. Forçá-los também na
-          // interface evita que uma configuração antiga esconda campos que a
-          // ação de inscrição inevitavelmente exigirá.
-          enabled: key === "whatsapp" ? (f?.enabled ?? true) : true,
-          required: key === "whatsapp" ? (f?.required ?? false) : true,
+          enabled: f?.enabled ?? true,
+          required: f?.required ?? key !== "whatsapp",
           label: f?.label?.trim() || FIELD_DEFAULTS[key].label,
         };
       })
@@ -289,7 +282,7 @@ export function SignupForm({
   return (
     <form
       action={formAction}
-      className="space-y-4 sm:space-y-5 lg:space-y-4"
+      className="space-y-3.5 sm:space-y-5 lg:space-y-4"
       onSubmit={(event) => includeLeadSource(event.currentTarget)}
     >
       <input type="hidden" name="webinarId" value={webinarId} />
@@ -305,17 +298,17 @@ export function SignupForm({
           <input type="hidden" name="date" value={slot?.date ?? ""} />
           <input type="hidden" name="time" value={slot?.time ?? ""} />
 
-          <div className="relative flex min-h-16 items-center gap-3 rounded-[12px] border border-[color:var(--cap-focus)] bg-white px-4 py-2.5 ring-4 ring-[color:var(--cap-focus-ring)] sm:min-h-0 sm:py-3 lg:py-2.5">
+          <div className="relative flex items-center gap-3 rounded-[12px] border-2 border-[color:var(--cap-ink)] bg-white px-4 py-2.5 sm:py-3 lg:py-2.5">
             <span className="text-[color:var(--cap-ink)]">
               <CalendarIcon />
             </span>
             <span className="min-w-0 flex-1 leading-tight">
-              <span className="block truncate text-[16px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
+              <span className="block truncate text-[13px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
                 {slot && mounted ? slotWhen(slot, timezone, now) : "Carregando horários…"}
               </span>
               {status && (
                 <span
-                  className="mt-0.5 block text-[11px] font-bold uppercase tracking-[0.06em] sm:text-[12px]"
+                  className="mt-0.5 block text-[10px] font-bold uppercase tracking-[0.06em] sm:text-[12px]"
                   style={{ color: status.live ? "#dc2626" : "var(--cap-live)" }}
                 >
                   {status.text}
@@ -447,7 +440,7 @@ export function SignupForm({
                 setCountryId(nextCountryId);
                 setPhone((p) => maskPhone(p, nextCountryCode));
               }}
-              className={`${capFieldBase} w-[116px] shrink-0 px-3 sm:text-[15px]`}
+              className={`${capFieldBase} w-[108px] shrink-0 px-3 text-[12px] sm:text-[15px]`}
             >
               {COUNTRIES.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -487,7 +480,7 @@ export function SignupForm({
         type="submit"
         disabled={pending || (useSlots && mounted && slots.length === 0)}
         style={{ background: buttonColor, color: buttonTextColor }}
-        className="min-h-[54px] w-full rounded-[12px] px-4 py-3.5 text-[16px] font-extrabold tracking-[-0.015em] shadow-[0_12px_20px_-10px_rgba(216,76,7,0.7)] transition hover:-translate-y-px hover:brightness-[0.96] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[color:var(--cap-focus-ring)] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[16px] lg:py-4"
+        className="w-full rounded-[10px] px-4 py-3.5 text-[13px] font-extrabold uppercase tracking-[0.02em] shadow-sm transition hover:brightness-[0.94] disabled:cursor-not-allowed disabled:opacity-60 sm:py-[17px] sm:text-[17px] lg:py-4"
       >
         {pending ? "Confirmando…" : buttonLabel}
       </button>
