@@ -307,36 +307,125 @@ export async function clearChat(formData: FormData) {
   revalidatePath(`/admin/webinars/${webinarId}`);
 }
 
+/** Estado exibido ao importar mensagens na etapa de chat. */
+export type ChatImportState = { error?: string; success?: string } | undefined;
+
 /** "HH:MM:SS" | "MM:SS" | "SS" | número -> segundos. */
-function parseTimeToSeconds(raw: string): number {
+function parseTimeToSeconds(raw: string): number | null {
   const t = raw.trim();
-  if (/^\d+$/.test(t)) return parseInt(t, 10);
-  const parts = t.split(":").map((p) => parseInt(p, 10) || 0);
-  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return 0;
+  if (/^\d+$/.test(t)) return Number(t);
+
+  const parts = t.split(":").map((part) => part.trim());
+  if (
+    (parts.length !== 2 && parts.length !== 3) ||
+    parts.some((part) => !/^\d+$/.test(part))
+  ) {
+    return null;
+  }
+
+  const values = parts.map(Number);
+  if (values.some((value) => !Number.isSafeInteger(value))) return null;
+  if (parts.length === 3) {
+    const [hours, minutes, seconds] = values;
+    return minutes < 60 && seconds < 60 ? hours * 3600 + minutes * 60 + seconds : null;
+  }
+
+  const [minutes, seconds] = values;
+  return seconds < 60 ? minutes * 60 + seconds : null;
+}
+
+type ParsedChatImportRow = {
+  at_seconds: number;
+  author_name: string;
+  message: string;
+};
+
+/**
+ * Aceita os dois formatos que o painel recebe ao colar uma planilha:
+ * - tempo, nome, mensagem
+ * - hora, minuto, segundo, nome, mensagem (exportação da plataforma)
+ */
+function parseChatImportRow(line: string): ParsedChatImportRow | null {
+  const separator = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+  const cols = line.split(separator).map((column) => column.trim());
+
+  const clockParts = cols.slice(0, 3);
+  const isFiveColumnFormat =
+    cols.length >= 5 && clockParts.every((part) => /^\d+$/.test(part));
+
+  if (isFiveColumnFormat) {
+    const atSeconds = parseTimeToSeconds(clockParts.join(":"));
+    const message = cols.slice(4).join(separator).trim();
+    if (atSeconds === null || !message) return null;
+    return {
+      at_seconds: atSeconds,
+      author_name: cols[3] || "Participante",
+      message,
+    };
+  }
+
+  const atSeconds = parseTimeToSeconds(cols[0] ?? "");
+  const message = cols.slice(2).join(separator).trim();
+  if (atSeconds === null || !message) return null;
+  return {
+    at_seconds: atSeconds,
+    author_name: cols[1] || "Participante",
+    message,
+  };
 }
 
 /** Importa chat via planilha colada (CSV): tempo, nome, mensagem por linha. */
-export async function importChatCsv(formData: FormData) {
+export async function importChatCsv(
+  _previousState: ChatImportState,
+  formData: FormData
+): Promise<ChatImportState> {
   const webinarId = String(formData.get("webinar_id"));
-  const csv = String(formData.get("csv") ?? "");
+  const csv = String(formData.get("csv") ?? "").trim();
+  if (!csv) {
+    return { error: "Cole pelo menos uma mensagem antes de importar." };
+  }
+
+  const invalidLines: number[] = [];
   const rows = csv
     .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter((l) => l && !/^tempo|^hor[aá]rio/i.test(l))
-    .map((line) => {
-      const cols = line.split(/[;,\t]/).map((c) => c.trim());
+    .map((line, index) => ({ line: line.trim(), number: index + 1 }))
+    .filter(({ line }) => line && !/^(tempo|hor[aá]rio|hora para ser enviado)\b/i.test(line))
+    .map(({ line, number }) => {
+      const parsed = parseChatImportRow(line);
+      if (!parsed) {
+        invalidLines.push(number);
+        return null;
+      }
       return {
         webinar_id: webinarId,
-        at_seconds: parseTimeToSeconds(cols[0] ?? "0"),
-        author_name: cols[1] || "Participante",
-        message: cols.slice(2).join(", ") || "",
+        ...parsed,
       };
     })
-    .filter((r) => r.message);
-  if (rows.length) await supabaseAdmin().from("chat_messages").insert(rows);
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  if (invalidLines.length) {
+    const shownLines = invalidLines.slice(0, 5).join(", ");
+    const suffix = invalidLines.length > 5 ? "…" : "";
+    return {
+      error: `Revise a${invalidLines.length === 1 ? " linha" : "s linhas"} ${shownLines}${suffix}. Use: tempo, nome, mensagem ou hora, minuto, segundo, nome, mensagem.`,
+    };
+  }
+
+  if (!rows.length) {
+    return {
+      error: "Não encontrei mensagens para importar. Use: tempo, nome, mensagem ou hora, minuto, segundo, nome, mensagem.",
+    };
+  }
+
+  const { error } = await supabaseAdmin().from("chat_messages").insert(rows);
+  if (error) {
+    return { error: `Não foi possível salvar as mensagens: ${error.message}` };
+  }
+
   revalidatePath(`/admin/webinars/${webinarId}/chat`);
+  return {
+    success: `${rows.length} ${rows.length === 1 ? "mensagem importada" : "mensagens importadas"} com sucesso.`,
+  };
 }
 
 /** Importa vendas via planilha colada (CSV): tempo, nome, cidade por linha. */

@@ -6,10 +6,10 @@ import {
   deleteChatMessage,
   generateChat,
   clearChat,
-  importChatCsv,
 } from "@/app/admin/actions";
 import { input, label, card, saveBtn } from "../_steps";
 import type { ChatMessage } from "@/types/db";
+import { ChatImportForm } from "./ChatImportForm";
 
 export const dynamic = "force-dynamic";
 
@@ -63,20 +63,8 @@ export default async function StepChat({
 
         {/* Via arquivo */}
         <details className={card}>
-          <summary className="cursor-pointer font-medium text-slate-200">Crie o chat via arquivo</summary>
-          <form action={importChatCsv} className="mt-3">
-            <input type="hidden" name="webinar_id" value={id} />
-            <label className={label}>Cole a planilha (uma linha por mensagem: tempo, nome, mensagem)</label>
-            <textarea
-              name="csv"
-              rows={5}
-              placeholder={"00:00:18, Daiane (Canoas/RS), Boa noite gente!! presente\n45, Patrícia, Goiânia aqui!"}
-              className={input}
-            />
-            <button className="mt-2 rounded-lg bg-slate-700 hover:bg-slate-600 px-4 py-2 text-sm text-white">
-              Importar mensagens
-            </button>
-          </form>
+          <summary className="cursor-pointer font-medium text-slate-200">Importe mensagens da planilha</summary>
+          <ChatImportForm webinarId={id} />
         </details>
 
         {/* Individual */}
