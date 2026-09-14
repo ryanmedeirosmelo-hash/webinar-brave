@@ -17,6 +17,35 @@ import type { FormField } from "@/types/db";
 
 export type RegistrationState = { error?: string } | undefined;
 
+const SPANISH_ERRORS: Record<string, string> = {
+  "Informe seu nome.": "Escribe tu nombre.",
+  "E-mail inválido.": "Correo electrónico no válido.",
+  "Data inválida.": "Fecha no válida.",
+  "Horário inválido.": "Horario no válido.",
+  "Dados inválidos.": "Datos no válidos.",
+  "Webinar indisponível.": "Webinario no disponible.",
+  "Informe seu WhatsApp válido com DDD.": "Introduce un WhatsApp válido con código de área.",
+  "Não foi possível concluir a inscrição. Tente de novo.":
+    "No se pudo completar la inscripción. Inténtalo de nuevo.",
+  "Escolha um dia em que a aula acontece.": "Elige un día en el que haya clase.",
+  "Escolha um horário válido da aula.": "Elige un horario válido de la clase.",
+  "Este horário já passou. Escolha o próximo.": "Este horario ya pasó. Elige el siguiente.",
+  "Esta sessão já foi encerrada. Escolha a próxima.": "Esta sesión ya terminó. Elige la siguiente.",
+  "As inscrições para esta aula ainda não abriram.":
+    "Las inscripciones para esta clase todavía no están abiertas.",
+  "Escolha o próximo horário disponível ou a sessão das 20h.":
+    "Elige el próximo horario disponible o la sesión de las 20:00.",
+  "Esta sessão já foi encerrada. Escolha o próximo horário.":
+    "Esta sesión ya terminó. Elige el próximo horario.",
+  "Este horário já passou.": "Este horario ya pasó.",
+  "Escolha um horário no futuro.": "Elige un horario futuro.",
+};
+
+function localizedRegistrationError(message: string, formData: FormData): string {
+  const language = String(formData.get("language") ?? "");
+  return /^es(?:-|$)/i.test(language) ? SPANISH_ERRORS[message] ?? message : message;
+}
+
 type WebinarRow = {
   id: string;
   timezone: string;
@@ -232,7 +261,9 @@ export async function createRegistration(
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+    return {
+      error: localizedRegistrationError(parsed.error.issues[0]?.message ?? "Dados inválidos.", formData),
+    };
   }
 
   const { webinarId, name, email, phone, date, time } = parsed.data;
@@ -250,16 +281,18 @@ export async function createRegistration(
     .single<WebinarRow>();
 
   if (wErr || !webinar || webinar.status !== "active") {
-    return { error: "Webinar indisponível." };
+    return { error: localizedRegistrationError("Webinar indisponível.", formData) };
   }
 
   if (whatsappIsRequired(webinar) && (phone ?? "").replace(/\D/g, "").length < 8) {
-    return { error: "Informe seu WhatsApp válido com DDD." };
+    return {
+      error: localizedRegistrationError("Informe seu WhatsApp válido com DDD.", formData),
+    };
   }
 
   const scheduledStartAt = buildScheduledStartAt(date, time, webinar.timezone);
   const err = validateSession(webinar, date, time, scheduledStartAt, false, true);
-  if (err) return { error: err };
+  if (err) return { error: localizedRegistrationError(err, formData) };
 
   // Idempotência: mesma pessoa + mesma sessão → reaproveita a inscrição, como o
   // fluxo recorrente já faz. No celular o envio duplicado é rotina — a pessoa
@@ -283,7 +316,9 @@ export async function createRegistration(
   );
 
   if (rErr || !reg) {
-    return { error: "Não foi possível concluir a inscrição. Tente de novo." };
+    return {
+      error: localizedRegistrationError("Não foi possível concluir a inscrição. Tente de novo.", formData),
+    };
   }
 
   // Antes da aula, a pessoa segue direto para a sala: ela mostra a contagem

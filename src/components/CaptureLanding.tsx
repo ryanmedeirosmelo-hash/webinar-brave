@@ -11,14 +11,22 @@ import type { Webinar } from "@/types/db";
  * campos do formulário, barra de progresso) — nada é fixo no código.
  */
 export function CaptureLanding({ webinar }: { webinar: Webinar }) {
+  const isSpanish = /^es(?:-|$)/i.test(webinar.language);
   const heading = webinar.capture_title?.trim() || displayTitle(webinar.title);
   const body = webinar.description?.trim();
   const image = webinar.capture_image_url?.trim();
-  const scarcity = webinar.capture_scarcity_text?.trim() || "Não perca tempo, vagas acabando:";
+  const scarcity =
+    webinar.capture_scarcity_text?.trim() ||
+    (isSpanish
+      ? "No pierdas tiempo, las plazas se están agotando:"
+      : "Não perca tempo, vagas acabando:");
   const progress = Math.min(100, Math.max(0, webinar.progress_start ?? 0));
 
   return (
-    <div className="cap-theme min-h-full py-3 sm:py-10 lg:py-8">
+    <div
+      lang={isSpanish ? "es-ES" : "pt-BR"}
+      className="cap-theme min-h-full py-3 sm:py-10 lg:py-8"
+    >
       <div className="mx-auto w-full max-w-[1240px] px-3 sm:px-5">
         <div className="rounded-[26px] bg-white px-6 py-5 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.6)] sm:px-10 sm:py-12 lg:px-12 lg:py-9">
           <div className="grid items-center gap-9 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.92fr)] lg:gap-10">
@@ -46,6 +54,7 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
               <div className="mt-5 sm:mt-7 lg:mt-5">
                 <SignupForm
                   webinarId={webinar.id}
+                  language={webinar.language}
                   availableTimes={webinar.available_times}
                   timezone={webinar.timezone}
                   type={webinar.type}
@@ -55,7 +64,10 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                   recurrenceFreq={webinar.recurrence_freq}
                   recurrenceDays={webinar.recurrence_days}
                   formFields={webinar.form_fields}
-                  buttonLabel={webinar.capture_button_label || "Confirme sua presença"}
+                  buttonLabel={
+                    webinar.capture_button_label ||
+                    (isSpanish ? "Ver transmisión" : "Confirme sua presença")
+                  }
                   buttonColor={webinar.capture_button_color}
                   buttonTextColor={webinar.capture_button_text_color}
                 />
@@ -98,7 +110,7 @@ export function CaptureLanding({ webinar }: { webinar: Webinar }) {
                 />
               </div>
               <p className="mt-2.5 text-center text-[13px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
-                {progress}% completo
+                {progress}% {isSpanish ? "completado" : "completo"}
               </p>
             </div>
           </div>

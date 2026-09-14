@@ -9,6 +9,7 @@ import type { FormField, WebinarType } from "@/types/db";
 
 type Props = {
   webinarId: string;
+  language: string;
   availableTimes: string[];
   timezone: string;
   type: WebinarType;
@@ -24,11 +25,27 @@ type Props = {
   buttonTextColor: string;
 };
 
+type Locale = "pt" | "es";
+
+function localeFor(language: string): Locale {
+  return /^es(?:-|$)/i.test(language) ? "es" : "pt";
+}
+
 /** Rótulos e placeholders padrão quando a etapa Login não definiu um. */
-const FIELD_DEFAULTS: Record<FormField["key"], { label: string; placeholder: string }> = {
-  name: { label: "Nome completo", placeholder: "Seu nome completo" },
-  email: { label: "E-mail", placeholder: "Seu melhor e-mail" },
-  whatsapp: { label: "WhatsApp", placeholder: "Seu telefone" },
+const FIELD_DEFAULTS: Record<
+  Locale,
+  Record<FormField["key"], { label: string; placeholder: string }>
+> = {
+  pt: {
+    name: { label: "Nome completo", placeholder: "Seu nome completo" },
+    email: { label: "E-mail", placeholder: "Seu melhor e-mail" },
+    whatsapp: { label: "WhatsApp", placeholder: "Seu telefone" },
+  },
+  es: {
+    name: { label: "Nombre completo", placeholder: "Tu nombre completo" },
+    email: { label: "Correo electrónico", placeholder: "Tu mejor correo electrónico" },
+    whatsapp: { label: "WhatsApp", placeholder: "Tu teléfono" },
+  },
 };
 
 const capLabel = "mb-1.5 block text-[12px] font-bold text-[color:var(--cap-ink)] sm:mb-2 sm:text-[15px] lg:mb-1.5";
@@ -37,23 +54,27 @@ const capFieldBase =
   "rounded-[10px] border-[1.5px] border-[color:var(--cap-line)] bg-white px-4 py-3 text-[12px] text-[color:var(--cap-ink)] placeholder:text-[color:var(--cap-placeholder)] outline-none transition focus:border-[color:var(--cap-ink)] sm:py-[15px] sm:text-[16px] lg:py-3.5";
 const capInput = `w-full ${capFieldBase}`;
 
-/** "13:30" → "13h30" (formato do print). */
-function hourLabel(time: string): string {
-  return time.replace(":", "h");
+/** Formata o horário para a convenção visual de cada idioma. */
+function hourLabel(time: string, locale: Locale): string {
+  return locale === "es" ? time : time.replace(":", "h");
 }
 
 /** "Hoje às 13h30" quando é o mesmo dia no fuso; senão "qui., 19/06 às 19h15". */
-function slotWhen(slot: JitSlot, timezone: string, nowMs: number): string {
+function slotWhen(slot: JitSlot, timezone: string, nowMs: number, locale: Locale): string {
   if (slot.date === zonedParts(nowMs, timezone).date) {
-    return `Hoje às ${hourLabel(slot.time)}`;
+    return locale === "es"
+      ? `Hoy a las ${hourLabel(slot.time, locale)}`
+      : `Hoje às ${hourLabel(slot.time, locale)}`;
   }
-  const when = new Intl.DateTimeFormat("pt-BR", {
+  const when = new Intl.DateTimeFormat(locale === "es" ? "es-ES" : "pt-BR", {
     weekday: "short",
     day: "2-digit",
     month: "2-digit",
     timeZone: timezone,
   }).format(new Date(slot.startMs));
-  return `${when} às ${hourLabel(slot.time)}`;
+  return locale === "es"
+    ? `${when} a las ${hourLabel(slot.time, locale)}`
+    : `${when} às ${hourLabel(slot.time, locale)}`;
 }
 
 /**
@@ -61,14 +82,35 @@ function slotWhen(slot: JitSlot, timezone: string, nowMs: number): string {
  * do `offsetSeconds` congelado na montagem), pra "COMEÇA EM 3 MINUTOS" andar
  * sozinho enquanto a pessoa preenche o formulário.
  */
-function slotStatus(slot: JitSlot, nowMs: number): { text: string; live: boolean } {
+function slotStatus(slot: JitSlot, nowMs: number, locale: Locale): { text: string; live: boolean } {
   const seconds = (slot.startMs - nowMs) / 1000;
-  if (seconds <= 0) return { text: "AO VIVO AGORA", live: true };
-  if (seconds < 60) return { text: "COMEÇA EM INSTANTES", live: false };
+  if (seconds <= 0) {
+    return { text: locale === "es" ? "EN VIVO AHORA" : "AO VIVO AGORA", live: true };
+  }
+  if (seconds < 60) {
+    return {
+      text: locale === "es" ? "COMIENZA EN INSTANTES" : "COMEÇA EM INSTANTES",
+      live: false,
+    };
+  }
   const mins = Math.ceil(seconds / 60);
-  if (mins < 60) return { text: `COMEÇA EM ${mins} MINUTO${mins > 1 ? "S" : ""}`, live: false };
+  if (mins < 60) {
+    return {
+      text:
+        locale === "es"
+          ? `COMIENZA EN ${mins} MINUTO${mins > 1 ? "S" : ""}`
+          : `COMEÇA EM ${mins} MINUTO${mins > 1 ? "S" : ""}`,
+      live: false,
+    };
+  }
   const hours = Math.floor(mins / 60);
-  return { text: `COMEÇA EM ${hours} HORA${hours > 1 ? "S" : ""}`, live: false };
+  return {
+    text:
+      locale === "es"
+        ? `COMIENZA EN ${hours} HORA${hours > 1 ? "S" : ""}`
+        : `COMEÇA EM ${hours} HORA${hours > 1 ? "S" : ""}`,
+    live: false,
+  };
 }
 
 /** Máscara brasileira: (11) 99999-9999. Outros DDIs ficam só com os dígitos. */
@@ -128,7 +170,11 @@ function ChevronIcon() {
 }
 
 /** Mensagem única para "a requisição não chegou ao servidor". */
-const NETWORK_ERROR = "Não foi possível enviar. Confira sua conexão e toque de novo.";
+function networkError(locale: Locale) {
+  return locale === "es"
+    ? "No se pudo enviar. Comprueba tu conexión y vuelve a intentarlo."
+    : "Não foi possível enviar. Confira sua conexão e toque de novo.";
+}
 
 /**
  * O estado carrega de volta o que a pessoa digitou. O React 19 zera o
@@ -162,7 +208,10 @@ async function submitRegistration(
     return result ? { ...result, values } : result;
   } catch (error) {
     unstable_rethrow(error);
-    return { error: NETWORK_ERROR, values };
+    return {
+      error: networkError(localeFor(String(formData.get("language") ?? ""))),
+      values,
+    };
   }
 }
 
@@ -179,6 +228,7 @@ function includeLeadSource(form: HTMLFormElement) {
 
 export function SignupForm({
   webinarId,
+  language,
   availableTimes,
   timezone,
   type,
@@ -192,6 +242,7 @@ export function SignupForm({
   buttonColor,
   buttonTextColor,
 }: Props) {
+  const locale = localeFor(language);
   const [state, formAction, pending] = useActionState<FormState, FormData>(
     submitRegistration,
     undefined
@@ -266,7 +317,7 @@ export function SignupForm({
           key,
           enabled: f?.enabled ?? true,
           required: f?.required ?? key !== "whatsapp",
-          label: f?.label?.trim() || FIELD_DEFAULTS[key].label,
+          label: f?.label?.trim() || FIELD_DEFAULTS[locale][key].label,
         };
       })
       .filter((f) => f.enabled);
@@ -277,7 +328,7 @@ export function SignupForm({
   const emailField = field("email");
   const phoneField = field("whatsapp");
 
-  const status = slot && mounted ? slotStatus(slot, now) : null;
+  const status = slot && mounted ? slotStatus(slot, now, locale) : null;
 
   return (
     <form
@@ -286,6 +337,7 @@ export function SignupForm({
       onSubmit={(event) => includeLeadSource(event.currentTarget)}
     >
       <input type="hidden" name="webinarId" value={webinarId} />
+      <input type="hidden" name="language" value={language} />
       <input type="hidden" name="origin" defaultValue="" />
       <input type="hidden" name="referrer" defaultValue="" />
       <input type="hidden" name="user_agent" defaultValue="" />
@@ -293,7 +345,9 @@ export function SignupForm({
       {/* ---- Escolha da sessão ---- */}
       {useSlots ? (
         <div>
-          <span className={capLabel}>Escolha sua data</span>
+          <span className={capLabel}>
+            {locale === "es" ? "Elige tu fecha" : "Escolha sua data"}
+          </span>
           {/* O servidor remonta o instante a partir de date + time. */}
           <input type="hidden" name="date" value={slot?.date ?? ""} />
           <input type="hidden" name="time" value={slot?.time ?? ""} />
@@ -304,7 +358,11 @@ export function SignupForm({
             </span>
             <span className="min-w-0 flex-1 leading-tight">
               <span className="block truncate text-[13px] font-bold text-[color:var(--cap-ink)] sm:text-[17px]">
-                {slot && mounted ? slotWhen(slot, timezone, now) : "Carregando horários…"}
+                {slot && mounted
+                  ? slotWhen(slot, timezone, now, locale)
+                  : locale === "es"
+                    ? "Cargando horarios…"
+                    : "Carregando horários…"}
               </span>
               {status && (
                 <span
@@ -323,14 +381,14 @@ export function SignupForm({
                 é o seletor do sistema (melhor no celular e no teclado). */}
             {slots.length > 0 && (
               <select
-                aria-label="Escolha sua data"
+                aria-label={locale === "es" ? "Elige tu fecha" : "Escolha sua data"}
                 value={slot?.startMs ?? ""}
                 onChange={(e) => setSelectedStart(Number(e.target.value))}
                 className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
               >
                 {slots.map((s) => (
                   <option key={s.startMs} value={s.startMs}>
-                    {`${slotWhen(s, timezone, now || s.startMs)} — ${slotStatus(s, now || s.startMs).text.toLowerCase()}`}
+                    {`${slotWhen(s, timezone, now || s.startMs, locale)} — ${slotStatus(s, now || s.startMs, locale).text.toLowerCase()}`}
                   </option>
                 ))}
               </select>
@@ -339,7 +397,9 @@ export function SignupForm({
 
           {mounted && slots.length === 0 && (
             <p className="mt-2 text-[11px] text-[color:var(--cap-muted)] sm:text-[14px]">
-              Nenhuma sessão disponível agora.
+              {locale === "es"
+                ? "No hay ninguna sesión disponible ahora."
+                : "Nenhuma sessão disponível agora."}
             </p>
           )}
         </div>
@@ -347,7 +407,7 @@ export function SignupForm({
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className={capLabel} htmlFor="cap-date">
-              Escolha sua data
+              {locale === "es" ? "Elige tu fecha" : "Escolha sua data"}
             </label>
             <input
               id="cap-date"
@@ -362,7 +422,7 @@ export function SignupForm({
           </div>
           <div>
             <label className={capLabel} htmlFor="cap-time">
-              Horário
+              {locale === "es" ? "Horario" : "Horário"}
             </label>
             <select
               id="cap-time"
@@ -374,10 +434,10 @@ export function SignupForm({
             >
               {availableTimes.map((t) => (
                 <option key={t} value={t}>
-                  {hourLabel(t)}
+                  {hourLabel(t, locale)}
                 </option>
               ))}
-              {!availableTimes.includes(time) && <option value={time}>{hourLabel(time)}</option>}
+              {!availableTimes.includes(time) && <option value={time}>{hourLabel(time, locale)}</option>}
             </select>
           </div>
         </div>
@@ -396,7 +456,7 @@ export function SignupForm({
             autoComplete="name"
             /* Repõe o que foi digitado quando a action volta com erro. */
             defaultValue={state?.values?.name ?? ""}
-            placeholder={FIELD_DEFAULTS.name.placeholder}
+            placeholder={FIELD_DEFAULTS[locale].name.placeholder}
             className={capInput}
           />
         </div>
@@ -417,7 +477,7 @@ export function SignupForm({
             /* O teclado do iPhone capitaliza a primeira letra por padrão. */
             autoCapitalize="none"
             spellCheck={false}
-            placeholder={FIELD_DEFAULTS.email.placeholder}
+            placeholder={FIELD_DEFAULTS[locale].email.placeholder}
             className={capInput}
           />
         </div>
@@ -432,7 +492,7 @@ export function SignupForm({
           <input type="hidden" name="phone" value={phone ? `${countryCode} ${phone}` : ""} />
           <div className="flex gap-3">
             <select
-              aria-label="Código do país"
+              aria-label={locale === "es" ? "Código de país" : "Código do país"}
               value={countryId}
               onChange={(e) => {
                 const nextCountryId = e.target.value;
@@ -444,7 +504,7 @@ export function SignupForm({
             >
               {COUNTRIES.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {c.flag} {c.code} — {c.name}
+                  {c.flag} {c.code} — {locale === "es" ? c.nameEs : c.name}
                 </option>
               ))}
             </select>
@@ -456,7 +516,7 @@ export function SignupForm({
               required={phoneField.required}
               value={phone}
               onChange={(e) => setPhone(maskPhone(e.target.value, countryCode))}
-              placeholder={FIELD_DEFAULTS.whatsapp.placeholder}
+              placeholder={FIELD_DEFAULTS[locale].whatsapp.placeholder}
               className={`${capInput} min-w-0 flex-1`}
             />
           </div>
@@ -464,7 +524,9 @@ export function SignupForm({
               nessa pessoa: ela se inscreve e some. Avisa sem bloquear. */}
           {phoneIncomplete && (
             <p className="mt-1.5 text-[13px] text-[color:var(--cap-muted)]">
-              Confirme o DDD — sem ele o link não chega no seu WhatsApp.
+              {locale === "es"
+                ? "Confirma el código de área; sin él, el enlace no llegará a tu WhatsApp."
+                : "Confirme o DDD — sem ele o link não chega no seu WhatsApp."}
             </p>
           )}
         </div>
