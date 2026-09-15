@@ -61,8 +61,8 @@ export default async function StepOferta({
           <ImageUploader name="image_mobile_url" webinarId={id} defaultUrl={o?.image_mobile_url} label="Imagem da oferta (mobile)" />
         </div>
 
-        <div className="grid sm:grid-cols-3 gap-4 border-t border-slate-800 pt-4">
-          <HmsField prefix="pitch" label="Início da pitch" totalSeconds={o?.pitch_start_seconds ?? 0} />
+        <div className="space-y-4 border-t border-slate-800 pt-4">
+          <HmsField prefix="pitch" label="Início do pitch" totalSeconds={o?.pitch_start_seconds ?? 0} />
           <HmsField prefix="show" label="Início da oferta *" totalSeconds={o?.show_at_seconds ?? 0} />
           <HmsField prefix="hide" label="Fim da oferta" totalSeconds={o?.hide_at_seconds ?? 0} />
         </div>

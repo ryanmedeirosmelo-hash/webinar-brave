@@ -8,6 +8,7 @@ import { phoneKey } from "@/lib/phone";
 import { getInvitedPhonesByDay } from "@/app/admin/disparos";
 import type { Webinar } from "@/types/db";
 import { ADMIN_TIMEZONE } from "@/lib/brand";
+import * as XLSX from "xlsx";
 
 function slugify(input: string) {
   return input
@@ -340,22 +341,42 @@ type ParsedChatImportRow = {
   message: string;
 };
 
-/**
- * Aceita os dois formatos que o painel recebe ao colar uma planilha:
- * - tempo, nome, mensagem
- * - hora, minuto, segundo, nome, mensagem (exportação da plataforma)
- */
-function parseChatImportRow(line: string): ParsedChatImportRow | null {
-  const separator = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
-  const cols = line.split(separator).map((column) => column.trim());
+type ChatImportParseResult = {
+  rows: ParsedChatImportRow[];
+  invalidRows: number[];
+  error?: string;
+};
 
+const CHAT_IMPORT_MAX_ROWS = 10_000;
+const CHAT_IMPORT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+
+function cellToImportText(value: unknown): string {
+  if (value == null) return "";
+  if (typeof value === "number") return Number.isInteger(value) ? String(value) : String(value);
+  return String(value).trim();
+}
+
+function normalizeImportHeader(value: unknown): string {
+  return cellToImportText(value)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+function findImportColumn(headers: string[], aliases: string[]): number {
+  return headers.findIndex((header) => aliases.includes(header));
+}
+
+function parseChatImportColumns(cols: string[], messageSeparator = ","): ParsedChatImportRow | null {
   const clockParts = cols.slice(0, 3);
   const isFiveColumnFormat =
     cols.length >= 5 && clockParts.every((part) => /^\d+$/.test(part));
 
   if (isFiveColumnFormat) {
     const atSeconds = parseTimeToSeconds(clockParts.join(":"));
-    const message = cols.slice(4).join(separator).trim();
+    const message = cols.slice(4).join(messageSeparator).trim();
     if (atSeconds === null || !message) return null;
     return {
       at_seconds: atSeconds,
@@ -365,7 +386,7 @@ function parseChatImportRow(line: string): ParsedChatImportRow | null {
   }
 
   const atSeconds = parseTimeToSeconds(cols[0] ?? "");
-  const message = cols.slice(2).join(separator).trim();
+  const message = cols.slice(2).join(messageSeparator).trim();
   if (atSeconds === null || !message) return null;
   return {
     at_seconds: atSeconds,
@@ -374,48 +395,156 @@ function parseChatImportRow(line: string): ParsedChatImportRow | null {
   };
 }
 
-/** Importa chat via planilha colada (CSV): tempo, nome, mensagem por linha. */
+function parseChatImportText(csv: string): ChatImportParseResult {
+  const invalidRows: number[] = [];
+  const lines = csv
+    .split(/\r?\n/)
+    .map((line, index) => ({ line: line.trim(), number: index + 1 }))
+    .filter(({ line }) => line && !/^(tempo|hor[aá]rio|hora para ser enviado)\b/i.test(line));
+
+  if (lines.length > CHAT_IMPORT_MAX_ROWS) {
+    return {
+      rows: [],
+      invalidRows: [],
+      error: `O arquivo tem mais de ${CHAT_IMPORT_MAX_ROWS.toLocaleString("pt-BR")} linhas. Divida a importação em arquivos menores.`,
+    };
+  }
+
+  const rows = lines
+    .map(({ line, number }) => {
+      const parsed = parseChatImportRow(line);
+      if (!parsed) {
+        invalidRows.push(number);
+        return null;
+      }
+      return parsed;
+    })
+    .filter((row): row is ParsedChatImportRow => row !== null);
+
+  return { rows, invalidRows };
+}
+
+function parseChatImportWorkbook(buffer: ArrayBuffer): ChatImportParseResult {
+  try {
+    const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
+    const firstSheetName = workbook.SheetNames[0];
+    if (!firstSheetName) {
+      return { rows: [], invalidRows: [], error: "A planilha não tem nenhuma aba para importar." };
+    }
+
+    const sheet = workbook.Sheets[firstSheetName];
+    const matrix = XLSX.utils.sheet_to_json<unknown[]>(sheet, {
+      header: 1,
+      raw: true,
+      defval: "",
+      blankrows: false,
+    });
+    if (!matrix.length) {
+      return { rows: [], invalidRows: [], error: "A planilha está vazia." };
+    }
+    if (matrix.length > CHAT_IMPORT_MAX_ROWS + 1) {
+      return {
+        rows: [],
+        invalidRows: [],
+        error: `A planilha tem mais de ${CHAT_IMPORT_MAX_ROWS.toLocaleString("pt-BR")} mensagens. Divida a importação em arquivos menores.`,
+      };
+    }
+
+    const headers = matrix[0].map(normalizeImportHeader);
+    const hour = findImportColumn(headers, ["hora", "hora para ser enviado"]);
+    const minute = findImportColumn(headers, ["minuto", "minuto para ser enviado"]);
+    const second = findImportColumn(headers, ["segundo", "segundo para ser enviado"]);
+    const author = findImportColumn(headers, ["nome", "nome do participante", "autor"]);
+    const message = findImportColumn(headers, ["mensagem", "texto", "texto enviado"]);
+    const hasFiveColumnHeader = [hour, minute, second, author, message].every((index) => index >= 0);
+
+    const time = findImportColumn(headers, ["tempo", "time", "timestamp"]);
+    const hasThreeColumnHeader = time >= 0 && author >= 0 && message >= 0;
+    const hasHeader = hasFiveColumnHeader || hasThreeColumnHeader;
+    const dataRows = hasHeader ? matrix.slice(1) : matrix;
+    const invalidRows: number[] = [];
+    const rows: ParsedChatImportRow[] = [];
+
+    dataRows.forEach((rawRow, index) => {
+      const rowNumber = index + (hasHeader ? 2 : 1);
+      const values = rawRow.map(cellToImportText);
+      if (values.every((value) => !value)) return;
+
+      const columns = hasFiveColumnHeader
+        ? [values[hour], values[minute], values[second], values[author], values[message]]
+        : hasThreeColumnHeader
+          ? [values[time], values[author], values[message]]
+          : values;
+      const parsed = parseChatImportColumns(columns);
+      if (!parsed) {
+        invalidRows.push(rowNumber);
+        return;
+      }
+      rows.push(parsed);
+    });
+
+    return { rows, invalidRows };
+  } catch {
+    return {
+      rows: [],
+      invalidRows: [],
+      error: "Não foi possível ler a planilha. Use um arquivo Excel válido (.xls ou .xlsx).",
+    };
+  }
+}
+
+function chatImportValidationError(invalidRows: number[]): string | undefined {
+  if (!invalidRows.length) return undefined;
+  const shownRows = invalidRows.slice(0, 5).join(", ");
+  const suffix = invalidRows.length > 5 ? "…" : "";
+  return `Revise a${invalidRows.length === 1 ? " linha" : "s linhas"} ${shownRows}${suffix}. Use o modelo com hora, minuto, segundo, nome e texto da mensagem.`;
+}
+
+/**
+ * Aceita os dois formatos que o painel recebe ao colar uma planilha:
+ * - tempo, nome, mensagem
+ * - hora, minuto, segundo, nome, mensagem (exportação da plataforma)
+ */
+function parseChatImportRow(line: string): ParsedChatImportRow | null {
+  const separator = line.includes("\t") ? "\t" : line.includes(";") ? ";" : ",";
+  const cols = line.split(separator).map((column) => column.trim());
+  return parseChatImportColumns(cols, separator);
+}
+
+/** Importa chat via arquivo Excel ou planilha colada (CSV): tempo, nome, mensagem por linha. */
 export async function importChatCsv(
   _previousState: ChatImportState,
   formData: FormData
 ): Promise<ChatImportState> {
   const webinarId = String(formData.get("webinar_id"));
   const csv = String(formData.get("csv") ?? "").trim();
-  if (!csv) {
-    return { error: "Cole pelo menos uma mensagem antes de importar." };
+  const fileEntry = formData.get("file");
+  const hasFile = typeof fileEntry !== "string" && fileEntry !== null && fileEntry.size > 0;
+
+  let parsed: ChatImportParseResult;
+  if (hasFile) {
+    if (!/\.xls[x]?$/i.test(fileEntry.name)) {
+      return { error: "Selecione um arquivo Excel válido (.xls ou .xlsx)." };
+    }
+    if (fileEntry.size > CHAT_IMPORT_MAX_FILE_BYTES) {
+      return { error: "O arquivo excede o limite de 10 MB." };
+    }
+    parsed = parseChatImportWorkbook(await fileEntry.arrayBuffer());
+  } else {
+    if (!csv) {
+      return { error: "Cole mensagens ou selecione um arquivo Excel antes de importar." };
+    }
+    parsed = parseChatImportText(csv);
   }
 
-  const invalidLines: number[] = [];
-  const rows = csv
-    .split(/\r?\n/)
-    .map((line, index) => ({ line: line.trim(), number: index + 1 }))
-    .filter(({ line }) => line && !/^(tempo|hor[aá]rio|hora para ser enviado)\b/i.test(line))
-    .map(({ line, number }) => {
-      const parsed = parseChatImportRow(line);
-      if (!parsed) {
-        invalidLines.push(number);
-        return null;
-      }
-      return {
-        webinar_id: webinarId,
-        ...parsed,
-      };
-    })
-    .filter((row): row is NonNullable<typeof row> => row !== null);
-
-  if (invalidLines.length) {
-    const shownLines = invalidLines.slice(0, 5).join(", ");
-    const suffix = invalidLines.length > 5 ? "…" : "";
-    return {
-      error: `Revise a${invalidLines.length === 1 ? " linha" : "s linhas"} ${shownLines}${suffix}. Use: tempo, nome, mensagem ou hora, minuto, segundo, nome, mensagem.`,
-    };
+  if (parsed.error) return { error: parsed.error };
+  const validationError = chatImportValidationError(parsed.invalidRows);
+  if (validationError) return { error: validationError };
+  if (!parsed.rows.length) {
+    return { error: "Não encontrei mensagens para importar. Confira o modelo da planilha." };
   }
 
-  if (!rows.length) {
-    return {
-      error: "Não encontrei mensagens para importar. Use: tempo, nome, mensagem ou hora, minuto, segundo, nome, mensagem.",
-    };
-  }
+  const rows = parsed.rows.map((row) => ({ webinar_id: webinarId, ...row }));
 
   const { error } = await supabaseAdmin().from("chat_messages").insert(rows);
   if (error) {

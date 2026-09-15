@@ -11,8 +11,26 @@ export function ChatImportForm({ webinarId }: { webinarId: string }) {
   );
 
   return (
-    <form action={action} className="mt-3">
+    <form action={action} encType="multipart/form-data" className="mt-3">
       <input type="hidden" name="webinar_id" value={webinarId} />
+      <label htmlFor="chat-import-file" className={label}>
+        Envie um arquivo Excel (.xls ou .xlsx)
+      </label>
+      <input
+        id="chat-import-file"
+        name="file"
+        type="file"
+        accept=".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        className="block w-full rounded-lg border border-dashed border-slate-700 bg-slate-900/70 px-3.5 py-3 text-sm text-slate-300 file:mr-3 file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:border-slate-600"
+      />
+      <p className="mt-1.5 text-xs leading-5 text-slate-500">
+        Use a primeira aba com as colunas: Hora para ser enviado, Minuto para ser enviado, Segundo para ser enviado, Nome do participante e Texto enviado.
+      </p>
+      <div className="my-4 flex items-center gap-3 text-xs uppercase tracking-wide text-slate-600">
+        <span className="h-px flex-1 bg-slate-800" />
+        <span>ou cole os dados</span>
+        <span className="h-px flex-1 bg-slate-800" />
+      </div>
       <label htmlFor="chat-import" className={label}>
         Cole a planilha (tempo, nome, mensagem ou hora, minuto, segundo, nome, mensagem)
       </label>
@@ -20,7 +38,6 @@ export function ChatImportForm({ webinarId }: { webinarId: string }) {
         id="chat-import"
         name="csv"
         rows={5}
-        required
         aria-describedby="chat-import-feedback"
         placeholder={"00:00:18, Daiane (Canoas/RS), Boa noite gente!! presente\n45, Patrícia, Goiânia aqui!"}
         className={input}
