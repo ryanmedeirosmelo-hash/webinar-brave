@@ -421,13 +421,11 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         offers={offers}
         sales={sales}
         salesTitle={webinar.sales_notification_title}
-        language={webinar.language}
         autoplay={webinar.video_autoplay}
         fullscreen={webinar.video_fullscreen}
         draftMode
         resumeProgressEnabled={webinar.resume_progress_enabled}
-          supportWhatsapp={supportWhatsapp}
-          language={webinar.language}
+        supportWhatsapp={supportWhatsapp}
         thankYouPath={`/obrigado/${webinar.slug}`}
         audience={{ enabled: webinar.audience_enabled, mode: webinar.audience_mode, min: webinar.audience_min, max: webinar.audience_max }}
       />
