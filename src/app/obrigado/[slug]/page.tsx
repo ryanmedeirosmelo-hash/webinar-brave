@@ -6,6 +6,7 @@ import { TimedOffer } from "@/components/TimedOffer";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { supportWhatsAppNumber } from "@/lib/whatsapp";
 import type { Offer, Registration, Webinar } from "@/types/db";
+import { publicLocaleFor } from "@/lib/public-locale";
 
 // Cada página é derivada do webinar solicitado; não pode reutilizar o HTML de outro slug.
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export default async function ThankYouPage({
   if (!webinar) notFound();
 
   const title = displayTitle(webinar.title);
+  const locale = publicLocaleFor(webinar.language);
   const presenterName = webinar.presenter_name?.trim() || null;
   const brandName = presenterName || title;
   const requestedToken = typeof acesso === "string" ? acesso : null;
@@ -53,6 +55,7 @@ export default async function ThankYouPage({
       logoUrl={webinar.logo_url}
       brandName={brandName}
       presenterName={presenterName}
+      language={webinar.language}
     >
       <main className="relative isolate min-h-[calc(100dvh-3.5rem)] overflow-hidden px-4 py-12 sm:px-6 sm:py-20">
         <div
@@ -76,14 +79,15 @@ export default async function ThankYouPage({
               </svg>
             </div>
             <p className="mt-6 inline-flex rounded-full bg-[var(--hw-red)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] text-white">
-              Encerrado
+              {locale === "es" ? "Finalizado" : "Encerrado"}
             </p>
             <h1 className="mt-3 text-balance text-3xl font-bold tracking-tight text-[var(--hw-text)] sm:text-4xl">
-              Esta aula já foi encerrada.
+              {locale === "es" ? "Esta clase ya ha finalizado." : "Esta aula já foi encerrada."}
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-pretty text-[16px] leading-7 text-[var(--hw-muted)]">
-              Obrigado por acompanhar {title}. A transmissão terminou, mas você ainda pode entrar
-              na oferta apresentada durante a aula.
+              {locale === "es"
+                ? `Gracias por acompañar ${title}. La transmisión terminó, pero todavía puedes acceder a la oferta presentada durante la clase.`
+                : `Obrigado por acompanhar ${title}. A transmissão terminou, mas você ainda pode entrar na oferta apresentada durante a aula.`}
             </p>
           </div>
 
@@ -95,13 +99,13 @@ export default async function ThankYouPage({
             >
               <div className="mb-4 text-center">
                 <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--hw-red)]">
-                  Oferta disponível
+                  {locale === "es" ? "Oferta disponible" : "Oferta disponível"}
                 </p>
                 <h2
                   id="offer-heading"
                   className="mt-1 text-xl font-bold tracking-tight text-[var(--hw-text)]"
                 >
-                  Entre agora e garanta sua vaga
+                  {locale === "es" ? "Entra ahora y asegura tu plaza" : "Entre agora e garanta sua vaga"}
                 </h2>
               </div>
               <TimedOffer
@@ -113,12 +117,16 @@ export default async function ThankYouPage({
                 previewMode={!registration}
                 forceVisible
                 stacked
+                language={webinar.language}
               />
             </section>
           )}
 
           <div className="mt-10">
-            <SupportBox whatsapp={supportWhatsAppNumber(webinar.integrations)} />
+            <SupportBox
+              whatsapp={supportWhatsAppNumber(webinar.integrations)}
+              language={webinar.language}
+            />
           </div>
         </section>
       </main>

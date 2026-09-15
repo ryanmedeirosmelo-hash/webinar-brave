@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, SalesNotification } from "@/types/db";
 import { HwAvatar, hwColorFor } from "./HwKit";
+import { publicLocaleFor } from "@/lib/public-locale";
 
 type MsgData = { author_name: string; message: string; own?: boolean };
 
@@ -74,6 +75,7 @@ export function SimulatedChat({
   presenterAvatarUrl,
   viewers,
   embedded = false,
+  language,
 }: {
   messages: ChatMessage[];
   sales: SalesNotification[];
@@ -88,13 +90,15 @@ export function SimulatedChat({
   /** Quando o chat está dentro do painel com abas, o contorno pertence ao
    * painel externo — evita desenhar um segundo card dentro dele. */
   embedded?: boolean;
+  language?: string | null;
 }) {
+  const locale = publicLocaleFor(language);
   const boxRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
   const [draft, setDraft] = useState("");
   const [mine, setMine] = useState<{ id: string; at: number; message: string }[]>([]);
 
-  const myName = displayName(viewerName?.trim() || "Você");
+  const myName = displayName(viewerName?.trim() || (locale === "es" ? "Tú" : "Você"));
 
   const visible = useMemo<Item[]>(() => {
     const items: Item[] = [
@@ -136,16 +140,20 @@ export function SimulatedChat({
       }`}
     >
       <div className="flex items-center justify-between border-b border-[var(--hw-border)] px-4 py-3">
-        <span className="text-[15px] font-semibold">Chat ao vivo</span>
+        <span className="text-[15px] font-semibold">{locale === "es" ? "Chat en vivo" : "Chat ao vivo"}</span>
         <span className="rounded-full bg-[var(--hw-chip)] px-2.5 py-1 text-[12px] text-[var(--hw-muted)]">
-          {viewers ? `👁 ${viewers} assistindo` : `${visible.length} mensagens`}
+          {viewers
+            ? `👁 ${viewers} ${locale === "es" ? "viendo" : "assistindo"}`
+            : `${visible.length} ${locale === "es" ? "mensajes" : "mensagens"}`}
         </span>
       </div>
 
       <div ref={boxRef} className="flex-1 space-y-3.5 overflow-y-auto px-4 py-3.5">
         {visible.length === 0 && (
           <p className="text-[14px] text-[var(--hw-muted)]">
-            As mensagens aparecerão durante a aula…
+            {locale === "es"
+              ? "Los mensajes aparecerán durante la clase…"
+              : "As mensagens aparecerão durante a aula…"}
           </p>
         )}
         {visible.map((item) =>
@@ -188,7 +196,7 @@ export function SimulatedChat({
                   {item.data.author_name}
                   {item.data.own && (
                     <span className="ml-1.5 rounded bg-[var(--hw-red)] px-1.5 py-px text-[10px] font-bold uppercase text-white">
-                      você
+                      {locale === "es" ? "tú" : "você"}
                     </span>
                   )}
                 </p>
@@ -206,7 +214,7 @@ export function SimulatedChat({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           maxLength={200}
-          placeholder="Enviar mensagem…"
+          placeholder={locale === "es" ? "Enviar mensaje…" : "Enviar mensagem…"}
           className="flex-1 rounded-full border border-[var(--hw-border)] bg-[var(--hw-bg-soft)] px-4 py-2.5 text-[14px] text-[var(--hw-text)] outline-none placeholder:text-[var(--hw-muted)] focus:border-[var(--hw-red)]"
         />
         <button
@@ -214,7 +222,7 @@ export function SimulatedChat({
           disabled={!draft.trim()}
           className="rounded-full bg-[var(--hw-red)] px-4 py-2.5 text-[14px] font-semibold text-white transition hover:bg-[var(--hw-red-hover)] disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Enviar
+          {locale === "es" ? "Enviar" : "Enviar"}
         </button>
       </form>
     </div>

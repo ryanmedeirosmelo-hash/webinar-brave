@@ -22,10 +22,12 @@ export function supportWhatsAppNumber(integrations: Record<string, unknown> | nu
   return config.enabled === true ? normalizeWhatsAppNumber(config.value) : null;
 }
 
-export function supportWhatsAppHref(number: string | null | undefined) {
+export function supportWhatsAppHref(number: string | null | undefined, language?: string | null) {
   const normalized = normalizeWhatsAppNumber(number);
   if (!normalized) return null;
 
-  const message = "Olá! Acabei de assistir a aula ao vivo e preciso de ajuda.";
+  const message = /^es(?:-|$)/i.test(language ?? "")
+    ? "¡Hola! Acabo de ver la clase en vivo y necesito ayuda."
+    : "Olá! Acabei de assistir a aula ao vivo e preciso de ajuda.";
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 }

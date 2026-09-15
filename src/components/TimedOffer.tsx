@@ -1,6 +1,7 @@
 "use client";
 
 import { recordOfferClick } from "@/app/actions/offer-clicks";
+import { publicLocaleFor } from "@/lib/public-locale";
 import { hwButton } from "./HwKit";
 import type { Offer } from "@/types/db";
 
@@ -46,6 +47,7 @@ export function TimedOffer({
   previewMode,
   stacked,
   forceVisible,
+  language,
 }: {
   offers: Offer[];
   elapsed: number;
@@ -61,7 +63,9 @@ export function TimedOffer({
   registrationToken?: string | null;
   sessionStartIso?: string | null;
   previewMode?: boolean;
+  language?: string | null;
 }) {
+  const locale = publicLocaleFor(language);
   const active = findVisibleOffer(offers, elapsed, { forceVisible, stacked });
   if (!active) return null;
 
@@ -138,7 +142,7 @@ export function TimedOffer({
         )}
         <div className="flex-1">
           <span className="inline-block rounded-md bg-[var(--hw-red)]/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-[var(--hw-red)]">
-            Oferta liberada
+            {locale === "es" ? "Oferta disponible" : "Oferta liberada"}
           </span>
           <p className="mt-1 text-[17px] font-bold leading-snug">{active.title}</p>
           {active.body && (

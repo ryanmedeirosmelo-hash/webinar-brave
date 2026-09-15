@@ -28,6 +28,7 @@ import {
 import type { Webinar, ChatMessage, Offer, SalesNotification } from "@/types/db";
 import { FREE_ENTRY_DATES, FREE_ENTRY_SLUGS, PRE_COUNTDOWN_SLUGS } from "@/lib/brand";
 import { supportWhatsAppNumber } from "@/lib/whatsapp";
+import { publicLocaleFor } from "@/lib/public-locale";
 
 type SavedPerson = { name: string; email: string; phone: string };
 type SavedSession = { iso: string; token: string };
@@ -105,8 +106,8 @@ function browserLeadSource() {
   };
 }
 
-function fmtWhen(ms: number, tz: string): string {
-  return new Intl.DateTimeFormat("pt-BR", {
+function fmtWhen(ms: number, tz: string, language?: string | null): string {
+  return new Intl.DateTimeFormat(publicLocaleFor(language) === "es" ? "es-ES" : "pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "2-digit",
@@ -117,6 +118,7 @@ function fmtWhen(ms: number, tz: string): string {
 }
 
 export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draftView }: Props) {
+  const locale = publicLocaleFor(webinar.language);
   // Evita mismatch de hidratação: só calcula horários após montar no cliente.
   const mounted = useSyncExternalStore(
     subscribeToHydration,
@@ -297,6 +299,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
       logoUrl={webinar.logo_url}
       brandName={brandName}
       presenterName={webinar.presenter_name}
+      language={webinar.language}
     >
       {content}
     </HwPage>
@@ -305,7 +308,9 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
   // ---- Enquanto não montou: placeholder neutro (sem horário) ----
   if (!mounted) {
     return shell(
-      <p className="px-5 py-24 text-center text-[15px] text-[var(--hw-muted)]">Carregando…</p>
+      <p className="px-5 py-24 text-center text-[15px] text-[var(--hw-muted)]">
+        {locale === "es" ? "Cargando…" : "Carregando…"}
+      </p>
     );
   }
 
@@ -324,6 +329,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         resumeProgressEnabled={webinar.resume_progress_enabled}
         viewerName={person?.name ?? null}
         supportWhatsapp={supportWhatsapp}
+        language={webinar.language}
         thankYouPath={`/obrigado/${webinar.slug}`}
         videoUrl={videoUrl}
         durationSeconds={webinar.duration_seconds}
@@ -354,8 +360,17 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
     return shell(
       <HwEndedScreen
         title={title}
-        note="Fique de olho no seu e-mail — avisamos assim que a próxima turma abrir."
-        offerNote={`A condição apresentada na aula fica liberada até as ${POST_LIVE_OFFER_UNTIL} de hoje.`}
+        note={
+          locale === "es"
+            ? "Mantente atento a tu correo: te avisaremos cuando comience la próxima clase."
+            : "Fique de olho no seu e-mail — avisamos assim que a próxima turma abrir."
+        }
+        offerNote={
+          locale === "es"
+            ? `La condición presentada en la clase estará disponible hasta las ${POST_LIVE_OFFER_UNTIL} de hoy.`
+            : `A condição apresentada na aula fica liberada até as ${POST_LIVE_OFFER_UNTIL} de hoje.`
+        }
+        language={webinar.language}
         offer={
           offerAfterEnd && endedToday ? (
             <TimedOffer
@@ -367,10 +382,11 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
               }
               sessionStartIso={endedToday.toISOString()}
               stacked
+              language={webinar.language}
             />
           ) : null
         }
-        support={<SupportBox whatsapp={supportWhatsapp} />}
+        support={<SupportBox whatsapp={supportWhatsapp} language={webinar.language} />}
       />
     );
   }
@@ -393,6 +409,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         title={webinar.title}
         presenterName={webinar.presenter_name}
         presenterAvatarUrl={webinar.presenter_avatar_url}
+        language={webinar.language}
         brandName={brandName}
         logoUrl={webinar.logo_url}
         webinarId={webinar.id}
@@ -404,11 +421,13 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         offers={offers}
         sales={sales}
         salesTitle={webinar.sales_notification_title}
+        language={webinar.language}
         autoplay={webinar.video_autoplay}
         fullscreen={webinar.video_fullscreen}
         draftMode
         resumeProgressEnabled={webinar.resume_progress_enabled}
-        supportWhatsapp={supportWhatsapp}
+          supportWhatsapp={supportWhatsapp}
+          language={webinar.language}
         thankYouPath={`/obrigado/${webinar.slug}`}
         audience={{ enabled: webinar.audience_enabled, mode: webinar.audience_mode, min: webinar.audience_min, max: webinar.audience_max }}
       />
@@ -423,13 +442,17 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
             ela a pessoa assiste como anônima e some do seu funil. */}
         {sessionFailed && !token && (
           <div className="sticky top-0 z-40 flex flex-wrap items-center justify-center gap-3 bg-[var(--hw-red)] px-4 py-2.5 text-center text-[13px] font-medium text-white">
-            <span>Não conseguimos confirmar sua inscrição nesta aula.</span>
+            <span>
+              {locale === "es"
+                ? "No pudimos confirmar tu inscripción en esta clase."
+                : "Não conseguimos confirmar sua inscrição nesta aula."}
+            </span>
             <button
               type="button"
               onClick={() => setSessionRetry((n) => n + 1)}
               className="rounded-full bg-white/20 px-3 py-1 font-semibold underline-offset-2 hover:bg-white/30"
             >
-              Tentar de novo
+              {locale === "es" ? "Intentar de nuevo" : "Tentar de novo"}
             </button>
           </div>
         )}
@@ -444,6 +467,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
           resumeProgressEnabled={webinar.resume_progress_enabled}
           viewerName={person?.name ?? null}
           supportWhatsapp={supportWhatsapp}
+          language={webinar.language}
           thankYouPath={`/obrigado/${webinar.slug}`}
           videoUrl={videoUrl}
           durationSeconds={webinar.duration_seconds}
@@ -474,6 +498,7 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
         ms={startMs - now}
         presenterName={webinar.presenter_name}
         presenterAvatarUrl={webinar.presenter_avatar_url}
+        language={webinar.language}
       />
     );
   }
@@ -484,9 +509,9 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
       {/* ---- Hero ---- */}
       <section className="flex flex-col gap-6">
         <div className="flex flex-wrap items-center gap-2.5">
-          <HwLiveBadge label="Aula ao vivo" />
-          <HwChip>Gratuita</HwChip>
-          <HwChip>Vagas limitadas</HwChip>
+          <HwLiveBadge label={locale === "es" ? "Clase en vivo" : "Aula ao vivo"} language={webinar.language} />
+          <HwChip>{locale === "es" ? "Gratis" : "Gratuita"}</HwChip>
+          <HwChip>{locale === "es" ? "Plazas limitadas" : "Vagas limitadas"}</HwChip>
         </div>
 
         <h1 className="text-[34px] font-bold leading-[1.15] tracking-tight sm:text-[44px] lg:text-[52px]">
@@ -509,21 +534,25 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
             />
             <div className="leading-tight">
               <p className="text-[15px] font-semibold">{brandName}</p>
-              <p className="text-[13px] text-[var(--hw-muted)]">Quem apresenta</p>
+              <p className="text-[13px] text-[var(--hw-muted)]">
+                {locale === "es" ? "Presenta" : "Quem apresenta"}
+              </p>
             </div>
           </div>
           <span className="hidden h-9 w-px bg-[var(--hw-border)] sm:block" />
           <div className="flex items-center gap-2 rounded-xl bg-[var(--hw-chip)] px-3.5 py-2 text-[14px] font-medium">
             <span aria-hidden>🗓️</span>
-            <span className="capitalize">Hoje, {fmtWhen(startMs, tz)}</span>
+            <span className="capitalize">
+              {locale === "es" ? "Hoy, " : "Hoje, "}{fmtWhen(startMs, tz, webinar.language)}
+            </span>
           </div>
         </div>
 
         <ul className="grid gap-2.5 pt-2 text-[15px] text-[var(--hw-muted)]">
           {[
-            "Transmissão ao vivo, sem gravação depois",
-            "Condição especial liberada só durante a aula",
-            "Chat aberto para tirar dúvidas",
+            locale === "es" ? "Transmisión en vivo, sin grabación posterior" : "Transmissão ao vivo, sem gravação depois",
+            locale === "es" ? "Condición especial disponible solo durante la clase" : "Condição especial liberada só durante a aula",
+            locale === "es" ? "Chat abierto para resolver dudas" : "Chat aberto para tirar dúvidas",
           ].map((t) => (
             <li key={t} className="flex items-center gap-2.5">
               <span className="grid h-5 w-5 place-items-center rounded-full bg-[var(--hw-red)] text-[11px] font-bold text-white">
@@ -542,22 +571,27 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
           style={{ boxShadow: "var(--hw-shadow)" }}
         >
           <p className="text-[12px] font-bold uppercase tracking-widest text-[var(--hw-red)]">
-            Inscrição gratuita
+            {locale === "es" ? "Inscripción gratuita" : "Inscrição gratuita"}
           </p>
-          <h2 className="mt-1.5 text-[26px] font-bold tracking-tight">Garanta sua vaga</h2>
+          <h2 className="mt-1.5 text-[26px] font-bold tracking-tight">
+            {locale === "es" ? "Asegura tu plaza" : "Garanta sua vaga"}
+          </h2>
           <p className="mt-1.5 text-[14px] leading-relaxed text-[var(--hw-muted)]">
-            Preencha para entrar na aula. Você cai direto na sala — não precisa preencher de
-            novo neste aparelho.
+            {locale === "es"
+              ? "Completa tus datos para entrar en la clase. Accederás directamente a la sala y no tendrás que volver a rellenarlos en este dispositivo."
+              : "Preencha para entrar na aula. Você cai direto na sala — não precisa preencher de novo neste aparelho."}
           </p>
 
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             <div>
-              <label className="mb-1.5 block text-[14px] font-medium">Nome</label>
+              <label className="mb-1.5 block text-[14px] font-medium">
+                {locale === "es" ? "Nombre" : "Nome"}
+              </label>
               <input
                 name="name"
                 required
                 autoComplete="name"
-                placeholder="Seu nome"
+                placeholder={locale === "es" ? "Tu nombre" : "Seu nome"}
                 className={hwInput}
               />
             </div>
@@ -576,7 +610,9 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
               />
             </div>
             <div>
-              <label className="mb-1.5 block text-[14px] font-medium">Telefone (WhatsApp)</label>
+              <label className="mb-1.5 block text-[14px] font-medium">
+                {locale === "es" ? "Teléfono (WhatsApp)" : "Telefone (WhatsApp)"}
+              </label>
               <input
                 name="phone"
                 type="tel"
@@ -584,14 +620,16 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
                 autoComplete="tel"
                 inputMode="tel"
                 onChange={(e) => setPhoneDigits(e.target.value.replace(/\D/g, "").length)}
-                placeholder="(11) 99999-9999"
+                placeholder={locale === "es" ? "Tu teléfono" : "(11) 99999-9999"}
                 className={hwInput}
               />
               {/* Sem DDD o número passa na validação, mas o disparo nunca chega
                   nessa pessoa: ela se inscreve e some. Avisa sem bloquear. */}
               {phoneDigits > 0 && phoneDigits < 11 && (
                 <p className="mt-1.5 text-[13px] text-[var(--hw-muted)]">
-                  Confirme o DDD — sem ele o link não chega no seu WhatsApp.
+                  {locale === "es"
+                    ? "Confirma el código de área; sin él, el enlace no llegará a tu WhatsApp."
+                    : "Confirme o DDD — sem ele o link não chega no seu WhatsApp."}
                 </p>
               )}
             </div>
@@ -603,11 +641,17 @@ export function RegisterGate({ webinar, videoUrl, messages, offers, sales, draft
             )}
 
             <button type="submit" disabled={pending} className={`${hwButton} w-full py-3.5 text-[16px]`}>
-              {pending ? "Confirmando..." : `${webinar.capture_button_label || "Entrar na aula"} →`}
+              {pending
+                ? locale === "es"
+                  ? "Confirmando…"
+                  : "Confirmando..."
+                : `${webinar.capture_button_label || (locale === "es" ? "Entrar en la clase" : "Entrar na aula")} →`}
             </button>
 
             <p className="text-center text-[12px] text-[var(--hw-muted)]">
-              🔒 Seus dados são usados só para o acesso à aula.
+              {locale === "es"
+                ? "🔒 Tus datos se utilizan únicamente para acceder a la clase."
+                : "🔒 Seus dados são usados só para o acesso à aula."}
             </p>
           </form>
         </div>

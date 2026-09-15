@@ -25,6 +25,7 @@ export function PublicWebinarRoom({
         brandName={webinar.presenter_name || displayTitle(webinar.title)}
         logoUrl={webinar.logo_url}
         accentColor={webinar.capture_button_color}
+        language={webinar.language}
         webinarId={webinar.id}
         supportWhatsapp={supportWhatsAppNumber(webinar.integrations)}
         videoUrl={resolveVideoUrl(webinar)}

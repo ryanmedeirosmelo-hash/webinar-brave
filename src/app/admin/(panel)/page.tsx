@@ -125,7 +125,7 @@ export default async function AdminWebinarsPage() {
                   href={`/admin/webinars/${w.id}`}
                   className="block truncate font-semibold text-white transition hover:text-[#cbad78]"
                 >
-                  {displayTitle(w.title)}
+                  {w.internal_name || displayTitle(w.title)}
                 </Link>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
                   <span className="truncate">/{w.slug}</span>

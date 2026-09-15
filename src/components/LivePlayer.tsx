@@ -11,6 +11,7 @@ import { SimulatedChat } from "./SimulatedChat";
 import { findVisibleOffer, TimedOffer } from "./TimedOffer";
 import { SupportBox } from "./SupportBox";
 import { displayTitle } from "./Brand";
+import { publicLocaleFor } from "@/lib/public-locale";
 import {
   HwAvatar,
   HwCountdownScreen,
@@ -32,6 +33,8 @@ type Props = {
   logoUrl?: string | null;
   /** Cor de destaque da marca (bordas do player, contagem regressiva). */
   accentColor?: string | null;
+  /** Idioma dos textos fixos da experiência pública. */
+  language?: string | null;
   videoUrl: string;
   durationSeconds: number;
   scheduledStartAtIso: string;
@@ -166,6 +169,7 @@ export function LivePlayer({
   brandName,
   logoUrl,
   accentColor,
+  language,
   videoUrl,
   durationSeconds,
   scheduledStartAtIso,
@@ -189,6 +193,7 @@ export function LivePlayer({
   draftMode,
 }: Props) {
   void autoplay; // o simulated-live sempre força play; mantido p/ futuras opções
+  const locale = publicLocaleFor(language);
   const videoRef = useRef<HTMLVideoElement>(null);
   const playerRef = useRef<HTMLDivElement>(null);
   const initialScheduledElapsed = elapsedSeconds(scheduledStartAtIso);
@@ -810,7 +815,13 @@ export function LivePlayer({
   }, [exitPlayerFullscreen, isFullscreen, visibleOfferId]);
 
   const shell = (content: React.ReactNode, live?: boolean) => (
-    <HwPage logoUrl={logoUrl} brandName={brand} presenterName={presenterName} live={live}>
+    <HwPage
+      logoUrl={logoUrl}
+      brandName={brand}
+      presenterName={presenterName}
+      live={live}
+      language={language}
+    >
       {content}
     </HwPage>
   );
@@ -842,8 +853,17 @@ export function LivePlayer({
   const endedScreen = shell(
     <HwEndedScreen
       title={shownTitle}
-      note="A transmissão não fica disponível para reapresentação. Fique de olho no seu e-mail para a próxima turma."
-      offerNote={`A condição apresentada na aula fica liberada até as ${POST_LIVE_OFFER_UNTIL} de hoje.`}
+      note={
+        locale === "es"
+          ? "La transmisión no estará disponible para volver a verla. Mantente atento a tu correo para la próxima clase."
+          : "A transmissão não fica disponível para reapresentação. Fique de olho no seu e-mail para a próxima turma."
+      }
+      offerNote={
+        locale === "es"
+          ? `La condición presentada en la clase estará disponible hasta las ${POST_LIVE_OFFER_UNTIL} de hoy.`
+          : `A condição apresentada na aula fica liberada até as ${POST_LIVE_OFFER_UNTIL} de hoje.`
+      }
+      language={language}
       offer={
         offerAfterEnd ? (
           <TimedOffer
@@ -853,6 +873,7 @@ export function LivePlayer({
             registrationToken={registrationToken}
             sessionStartIso={scheduledStartAtIso}
             previewMode={draftMode}
+            language={language}
             forceVisible={draftMode}
             stacked
           />
@@ -860,7 +881,7 @@ export function LivePlayer({
       }
       /* Suporte só no fim, junto do botão de compra — durante a live o WhatsApp
          tirava o espectador da transmissão. */
-      support={<SupportBox whatsapp={supportWhatsapp} />}
+      support={<SupportBox whatsapp={supportWhatsapp} language={language} />}
     />
   );
   if (phase === "ended" && !previewMode) return endedScreen;
@@ -873,6 +894,7 @@ export function LivePlayer({
         ms={Math.max(0, -scheduledElapsed) * 1000}
         presenterName={presenterName}
         presenterAvatarUrl={presenterAvatarUrl}
+        language={language}
       />
     );
   }
@@ -939,8 +961,12 @@ export function LivePlayer({
             <div className="absolute inset-0 grid place-items-center px-6 text-center">
               <div className="space-y-2">
                 <p className="text-[34px]">🎬</p>
-                <p className="text-[15px] font-medium text-white/80">A transmissão vai começar.</p>
-                <p className="text-[13px] text-white/50">Fique nesta página.</p>
+                <p className="text-[15px] font-medium text-white/80">
+                  {locale === "es" ? "La transmisión comenzará." : "A transmissão vai começar."}
+                </p>
+                <p className="text-[13px] text-white/50">
+                  {locale === "es" ? "Quédate en esta página." : "Fique nesta página."}
+                </p>
               </div>
             </div>
           )}
@@ -948,7 +974,7 @@ export function LivePlayer({
           {/* Selo "AO VIVO" dentro da box — reforça a sensação de transmissão */}
           {videoUrl && !connecting && !previewMode && (
             <div className="pointer-events-none absolute left-3 top-3 z-30 flex items-center gap-2">
-              <HwLiveBadge />
+              <HwLiveBadge language={language} />
               {audience.enabled && (
                 <span className="rounded-md bg-black/60 px-2 py-1 text-[12px] font-medium text-white backdrop-blur-sm">
                   👁 {viewers}
@@ -970,16 +996,22 @@ export function LivePlayer({
           {videoUrl && connecting && (
             <div className="absolute inset-0 z-20 grid place-items-center bg-black px-6 text-center">
               <div className="space-y-4">
-                <HwLiveBadge />
+                <HwLiveBadge language={language} />
                 <div className="flex items-center justify-center gap-3">
                   <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/25 border-t-[var(--hw-red)]" />
                   <p className="text-[17px] font-medium text-white">
                     {presenterName
-                      ? `${presenterName} está se conectando…`
-                      : "Conectando à transmissão…"}
+                      ? locale === "es"
+                        ? `${presenterName} se está conectando…`
+                        : `${presenterName} está se conectando…`
+                      : locale === "es"
+                        ? "Conectando con la transmisión…"
+                        : "Conectando à transmissão…"}
                   </p>
                 </div>
-                <p className="text-[14px] text-white/60">Aguarde, já vai começar.</p>
+                <p className="text-[14px] text-white/60">
+                  {locale === "es" ? "Espera, comenzará enseguida." : "Aguarde, já vai começar."}
+                </p>
               </div>
             </div>
           )}
@@ -990,10 +1022,10 @@ export function LivePlayer({
                 setPlayerVolume(volume || 0.7);
               }}
               className="absolute inset-0 z-10 grid cursor-pointer place-items-center bg-black/40 backdrop-blur-[1px]"
-              aria-label="Ativar som"
+              aria-label={locale === "es" ? "Activar sonido" : "Ativar som"}
             >
               <span className="flex animate-pulse items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[16px] font-bold text-[#0f0f0f] shadow-2xl">
-                🔊 Clique para ouvir o áudio
+                {locale === "es" ? "🔊 Haz clic para escuchar el audio" : "🔊 Clique para ouvir o áudio"}
               </span>
             </button>
           )}
@@ -1012,10 +1044,10 @@ export function LivePlayer({
                 }, () => {});
               }}
               className="absolute inset-0 z-10 grid cursor-pointer place-items-center bg-black/50 backdrop-blur-[1px]"
-              aria-label="Continuar assistindo"
+              aria-label={locale === "es" ? "Seguir viendo" : "Continuar assistindo"}
             >
               <span className="flex items-center gap-2 rounded-full bg-white px-6 py-3.5 text-[16px] font-bold text-[#0f0f0f] shadow-2xl">
-                ▶ Toque para continuar
+                {locale === "es" ? "▶ Toca para continuar" : "▶ Toque para continuar"}
               </span>
             </button>
           )}
@@ -1033,7 +1065,7 @@ export function LivePlayer({
                   : undefined
               }
               role="group"
-              aria-label="Controles do vídeo"
+              aria-label={locale === "es" ? "Controles del vídeo" : "Controles do vídeo"}
               /* Enquanto se mexe na barra ela fica; o toque aqui não pode
                  chegar no container, senão o próprio uso a esconderia. */
               onPointerDown={(event) => {
@@ -1056,7 +1088,15 @@ export function LivePlayer({
                 type="button"
                 onClick={toggleMuted}
                 className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                aria-label={muted || volume === 0 ? "Ativar som" : "Silenciar"}
+                aria-label={
+                  muted || volume === 0
+                    ? locale === "es"
+                      ? "Activar sonido"
+                      : "Ativar som"
+                    : locale === "es"
+                      ? "Silenciar"
+                      : "Silenciar"
+                }
               >
                 {muted || volume === 0 ? (
                   <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-current">
@@ -1076,7 +1116,7 @@ export function LivePlayer({
                 value={muted ? 0 : volume}
                 onChange={(event) => setPlayerVolume(Number(event.target.value))}
                 className="h-1.5 w-20 cursor-pointer accent-[var(--hw-red)]"
-                aria-label="Volume"
+                aria-label={locale === "es" ? "Volumen" : "Volume"}
               />
               {/* Enquanto a oferta está visível, o foco é o CTA no layout
                   normal. Escondemos a entrada em fullscreen para a pessoa não
@@ -1086,7 +1126,15 @@ export function LivePlayer({
                   type="button"
                   onClick={() => toggleFullscreen().catch(() => {})}
                   className="grid h-9 w-9 place-items-center rounded-lg transition hover:bg-white/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
-                  aria-label={isFullscreen ? "Sair da tela cheia" : "Tela cheia"}
+                  aria-label={
+                    isFullscreen
+                      ? locale === "es"
+                        ? "Salir de pantalla completa"
+                        : "Sair da tela cheia"
+                      : locale === "es"
+                        ? "Pantalla completa"
+                        : "Tela cheia"
+                  }
                 >
                   {isFullscreen ? (
                     <svg viewBox="0 0 24 24" aria-hidden className="h-5 w-5 fill-none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
@@ -1120,7 +1168,11 @@ export function LivePlayer({
             <div className="leading-tight">
               <p className="text-[15px] font-semibold">{presenterName || brand}</p>
               <p className="text-[13px] text-[var(--hw-muted)]">
-                {presenterName && brand !== presenterName ? brand : "Quem apresenta"}
+                {presenterName && brand !== presenterName
+                  ? brand
+                  : locale === "es"
+                    ? "Presenta"
+                    : "Quem apresenta"}
               </p>
             </div>
           </div>
@@ -1134,7 +1186,7 @@ export function LivePlayer({
       <div className="flex h-[60vh] min-h-[420px] flex-col overflow-hidden rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-surface)] lg:sticky lg:top-[72px] lg:h-[calc(100dvh-96px)]">
         <div
           role="tablist"
-          aria-label="Painel da transmissão"
+          aria-label={locale === "es" ? "Panel de la transmisión" : "Painel da transmissão"}
           className="flex shrink-0 border-b border-[var(--hw-border)] p-1.5"
         >
           <button
@@ -1188,6 +1240,7 @@ export function LivePlayer({
               previewMode={previewMode || draftMode}
               forceVisible={draftMode}
               stacked
+              language={language}
             />
           </div>
         ) : (
@@ -1207,6 +1260,7 @@ export function LivePlayer({
               presenterAvatarUrl={presenterAvatarUrl}
               viewers={audience.enabled ? viewers : null}
               embedded
+              language={language}
             />
           </div>
         )}

@@ -68,6 +68,7 @@ export default async function WatchPage({
         brandName={webinar.presenter_name || displayTitle(webinar.title)}
         logoUrl={webinar.logo_url}
         accentColor={webinar.capture_button_color}
+        language={webinar.language}
         videoUrl={videoUrl}
         durationSeconds={webinar.duration_seconds}
         scheduledStartAtIso={registration.scheduled_start_at}

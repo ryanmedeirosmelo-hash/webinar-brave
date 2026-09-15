@@ -3,6 +3,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 import { PresenterAvatar } from "./PresenterAvatar";
+import { publicLocaleFor } from "@/lib/public-locale";
 
 /* ------------------------------------------------------------------ *
  * Peças do tema "HotWebinar" — vermelho + branco, leitura de YouTube.
@@ -36,14 +37,15 @@ export const hwInput =
   "w-full rounded-xl border border-[var(--hw-border)] bg-[var(--hw-bg-soft)] px-4 py-3 text-[15px] text-[var(--hw-text)] outline-none transition placeholder:text-[var(--hw-muted)] focus:border-[var(--hw-red)] focus:bg-[var(--hw-surface)] focus:ring-4 focus:ring-[var(--hw-red)]/15";
 
 /** Selo AO VIVO: retângulo vermelho arredondado, igual ao do player. */
-export function HwLiveBadge({ label = "AO VIVO" }: { label?: string }) {
+export function HwLiveBadge({ label, language }: { label?: string; language?: string | null }) {
+  const locale = publicLocaleFor(language);
   return (
     <span className="inline-flex w-fit items-center gap-1.5 rounded-md bg-[var(--hw-red)] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">
       <span className="relative flex h-2 w-2">
         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white/80" />
         <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
       </span>
-      {label}
+      {label ?? (locale === "es" ? "EN VIVO" : "AO VIVO")}
     </span>
   );
 }
@@ -135,21 +137,23 @@ export function HwTopBar({
   brandName,
   presenterName,
   live,
+  language,
 }: {
   logoUrl?: string | null;
   brandName: string;
   presenterName?: string | null;
   live?: boolean;
+  language?: string | null;
 }) {
   return (
     <header className="sticky top-0 z-30 border-b border-[var(--hw-border)] bg-[var(--hw-bg)]/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-4 sm:px-6">
         <HwLogo logoUrl={logoUrl} name={brandName} compact />
         <div className="flex items-center gap-3">
-          {live && <HwLiveBadge />}
+          {live && <HwLiveBadge language={language} />}
           {presenterName && (
             <span className="hidden text-[13px] text-[var(--hw-muted)] sm:inline">
-              com {presenterName}
+              {publicLocaleFor(language) === "es" ? "con" : "com"} {presenterName}
             </span>
           )}
         </div>
@@ -164,21 +168,25 @@ export function HwPage({
   brandName,
   presenterName,
   live,
+  language,
   children,
 }: {
   logoUrl?: string | null;
   brandName: string;
   presenterName?: string | null;
   live?: boolean;
+  language?: string | null;
   children: ReactNode;
 }) {
+  const locale = publicLocaleFor(language);
   return (
-    <div className="hw-theme min-h-dvh">
+    <div className="hw-theme min-h-dvh" lang={locale === "es" ? "es-ES" : "pt-BR"}>
       <HwTopBar
         logoUrl={logoUrl}
         brandName={brandName}
         presenterName={presenterName}
         live={live}
+        language={language}
       />
       {children}
     </div>
@@ -186,7 +194,8 @@ export function HwPage({
 }
 
 /** Contagem regressiva em blocos vermelhos (dias só quando faltam). */
-export function HwCountdown({ ms }: { ms: number }) {
+export function HwCountdown({ ms, language }: { ms: number; language?: string | null }) {
+  const locale = publicLocaleFor(language);
   const total = Math.max(0, Math.ceil(ms / 1000));
   const d = Math.floor(total / 86400);
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -195,7 +204,7 @@ export function HwCountdown({ ms }: { ms: number }) {
     [pad(Math.floor((total % 3600) / 60)), "min"],
     [pad(total % 60), "seg"],
   ];
-  if (d > 0) blocos.unshift([String(d), d === 1 ? "dia" : "dias"]);
+  if (d > 0) blocos.unshift([String(d), d === 1 ? "dia" : locale === "es" ? "días" : "dias"]);
 
   return (
     <div className="flex items-end gap-3">
@@ -222,27 +231,33 @@ export function HwCountdownScreen({
   ms,
   presenterName,
   presenterAvatarUrl,
+  language,
 }: {
   title: string;
   ms: number;
   presenterName?: string | null;
   presenterAvatarUrl?: string | null;
+  language?: string | null;
 }) {
+  const locale = publicLocaleFor(language);
   return (
     <div className="mx-auto flex max-w-[760px] flex-col items-center px-5 py-16 text-center sm:py-24">
-      <HwLiveBadge label="Começa em breve" />
+      <HwLiveBadge label={locale === "es" ? "Comienza pronto" : "Começa em breve"} language={language} />
       <h1 className="mt-6 text-[32px] font-bold leading-tight tracking-tight sm:text-[42px]">
         {title}
       </h1>
-      <p className="mt-4 text-[15px] text-[var(--hw-muted)]">A aula ao vivo começa em</p>
+      <p className="mt-4 text-[15px] text-[var(--hw-muted)]">
+        {locale === "es" ? "La clase en vivo comienza en" : "A aula ao vivo começa em"}
+      </p>
 
       <div className="mt-5">
-        <HwCountdown ms={ms} />
+        <HwCountdown ms={ms} language={language} />
       </div>
 
       <p className="mt-8 max-w-md text-[15px] leading-relaxed text-[var(--hw-muted)]">
-        Não feche esta página — a sala abre sozinha no horário e a transmissão começa
-        automaticamente.
+        {locale === "es"
+          ? "No cierres esta página: la sala se abrirá automáticamente a la hora programada y la transmisión comenzará sola."
+          : "Não feche esta página — a sala abre sozinha no horário e a transmissão começa automaticamente."}
       </p>
 
       {presenterName && (
@@ -256,7 +271,9 @@ export function HwCountdownScreen({
           <p className="text-left text-[14px] leading-tight">
             <span className="font-semibold">{presenterName}</span>
             <br />
-            <span className="text-[var(--hw-muted)]">entra ao vivo em instantes</span>
+            <span className="text-[var(--hw-muted)]">
+              {locale === "es" ? "entra en vivo en instantes" : "entra ao vivo em instantes"}
+            </span>
           </p>
         </div>
       )}
@@ -271,24 +288,29 @@ export function HwEndedScreen({
   offerNote,
   offer,
   support,
+  language,
 }: {
   title: string;
   note: string;
   offerNote?: string | null;
   offer?: ReactNode;
   support?: ReactNode;
+  language?: string | null;
 }) {
+  const locale = publicLocaleFor(language);
   return (
     <div className="mx-auto flex max-w-[720px] flex-col items-center px-5 py-14 text-center sm:py-20">
       <span className="inline-flex items-center gap-2 rounded-full bg-[var(--hw-chip)] px-3.5 py-1.5 text-[13px] font-semibold text-[var(--hw-muted)]">
         <span className="h-2 w-2 rounded-full bg-[var(--hw-muted)]" />
-        Aula encerrada
+        {locale === "es" ? "Clase finalizada" : "Aula encerrada"}
       </span>
 
       <h1 className="mt-5 text-[30px] font-bold leading-tight tracking-tight sm:text-[38px]">
         {title}
       </h1>
-      <p className="mt-4 text-[17px]">Esta aula ao vivo já foi encerrada.</p>
+      <p className="mt-4 text-[17px]">
+        {locale === "es" ? "Esta clase en vivo ya ha finalizado." : "Esta aula ao vivo já foi encerrada."}
+      </p>
       <p className="mt-2 max-w-md text-[15px] leading-relaxed text-[var(--hw-muted)]">{note}</p>
 
       {offer && (

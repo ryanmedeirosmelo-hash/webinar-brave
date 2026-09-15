@@ -1,20 +1,24 @@
 "use client";
 
 import { supportWhatsAppHref } from "@/lib/whatsapp";
+import { publicLocaleFor } from "@/lib/public-locale";
 
 /**
  * Bloco de suporte exibido só na tela final (aula encerrada), junto da oferta.
  * Durante a live ele não aparece — sair pro WhatsApp tirava o espectador da aula.
  * O número vem da integração WhatsApp do webinar, configurada pelo painel.
  */
-export function SupportBox({ whatsapp }: { whatsapp?: string | null }) {
-  const href = supportWhatsAppHref(whatsapp);
+export function SupportBox({ whatsapp, language }: { whatsapp?: string | null; language?: string | null }) {
+  const locale = publicLocaleFor(language);
+  const href = supportWhatsAppHref(whatsapp, language);
   if (!href) return null;
 
   return (
     <div className="rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-bg-soft)] px-5 py-4 text-center">
       <p className="text-[14px] text-[var(--hw-muted)]">
-        Dúvidas, problemas ou necessita de ajuda? Fale com a nossa equipe no botão abaixo:
+        {locale === "es"
+          ? "¿Tienes dudas, problemas o necesitas ayuda? Habla con nuestro equipo en el botón de abajo:"
+          : "Dúvidas, problemas ou necessita de ajuda? Fale com a nossa equipe no botão abaixo:"}
       </p>
       <a
         href={href}
@@ -25,7 +29,7 @@ export function SupportBox({ whatsapp }: { whatsapp?: string | null }) {
         <svg viewBox="0 0 24 24" aria-hidden className="h-4 w-4 fill-current">
           <path d="M12.04 2c-5.46 0-9.9 4.44-9.9 9.9 0 1.75.46 3.45 1.32 4.95L2 22l5.3-1.39a9.86 9.86 0 0 0 4.74 1.21h.01c5.46 0 9.9-4.44 9.9-9.9 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0 0 12.04 2Zm5.8 14.16c-.25.69-1.44 1.32-1.99 1.37-.53.05-1 .24-3.37-.7-2.85-1.12-4.65-4.05-4.79-4.24-.14-.19-1.14-1.52-1.14-2.9 0-1.38.72-2.06.98-2.34.25-.28.55-.35.73-.35h.53c.17 0 .4-.06.62.48.25.6.85 2.08.92 2.23.07.14.12.31.02.5-.09.19-.14.31-.28.47l-.42.49c-.14.14-.28.29-.12.57.16.28.71 1.17 1.53 1.9 1.05.94 1.94 1.23 2.22 1.37.28.14.44.12.6-.07.17-.19.7-.81.89-1.09.19-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.28.14.46.21.53.33.07.12.07.68-.18 1.37Z" />
         </svg>
-        Falar com a equipe
+        {locale === "es" ? "Hablar con el equipo" : "Falar com a equipe"}
       </a>
     </div>
   );
