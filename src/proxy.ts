@@ -36,6 +36,11 @@ function toHost(request: NextRequest, target: string) {
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const reqHost = (request.headers.get("host") ?? "").toLowerCase();
+  const forwardedHeaders = new Headers(request.headers);
+  forwardedHeaders.set("x-current-path", pathname);
+
+  const continueRequest = () =>
+    NextResponse.next({ request: { headers: forwardedHeaders } });
 
   // 1. Domínios "de entrada" (apex/www) mandam tudo pro host de leads.
   if (LEADS_HOST && REDIRECT_TO_LEADS.has(reqHost)) {
@@ -44,7 +49,7 @@ export function proxy(request: NextRequest) {
 
   // 2. Fora de /admin não há nada a fazer no proxy.
   if (!pathname.startsWith("/admin")) {
-    return NextResponse.next();
+    return continueRequest();
   }
 
   // 3. /admin só existe na Área 1. No host de leads, manda pro painel.
@@ -53,12 +58,12 @@ export function proxy(request: NextRequest) {
   }
 
   // 4. A própria tela de login é pública.
-  if (pathname.startsWith("/admin/login")) return NextResponse.next();
+  if (pathname.startsWith("/admin/login")) return continueRequest();
 
   // 5. Demais rotas de /admin exigem sessão válida.
   const token = request.cookies.get(ADMIN_COOKIE)?.value;
   if (token && token === process.env.ADMIN_SESSION_TOKEN) {
-    return NextResponse.next();
+    return continueRequest();
   }
 
   const url = request.nextUrl.clone();
