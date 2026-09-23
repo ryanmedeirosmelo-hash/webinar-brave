@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useState, useSyncExternalStore } from "react";
+import { useActionState, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { unstable_rethrow } from "next/navigation";
 import { createRegistration, type RegistrationState } from "@/app/actions/registrations";
 import { jitSlots, recurrenceSlots, zonedParts, type JitSlot } from "@/lib/time";
@@ -300,9 +300,28 @@ export function SignupForm({
   const date = pickedDate || today;
   const [time, setTime] = useState(availableTimes[0] ?? "20:00");
 
-  const [countryId, setCountryId] = useState("br");
+  const [countryId, setCountryId] = useState(locale === "es" ? "mx" : "br");
   const [phone, setPhone] = useState("");
   const countryCode = COUNTRIES.find((country) => country.id === countryId)?.code ?? "+55";
+
+  useEffect(() => {
+    if (locale !== "es") return;
+
+    const controller = new AbortController();
+    fetch("https://ipapi.co/json/", { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { country_code?: string } | null) => {
+        const detectedId = data?.country_code?.trim().toLowerCase();
+        if (detectedId && COUNTRIES.some((country) => country.id === detectedId)) {
+          setCountryId(detectedId);
+        }
+      })
+      .catch(() => {
+        /* México continua selecionado quando a detecção falha. */
+      });
+
+    return () => controller.abort();
+  }, [locale]);
   // Celular brasileiro tem 11 dígitos com DDD. Só avisa depois que a pessoa
   // começou a digitar — não recebe o lead com um erro antes da primeira tecla.
   const phoneIncomplete =

@@ -3,7 +3,27 @@
 import { recordOfferClick } from "@/app/actions/offer-clicks";
 import { publicLocaleFor } from "@/lib/public-locale";
 import { hwButton } from "./HwKit";
+import type { MouseEvent } from "react";
 import type { Offer } from "@/types/db";
+
+function checkoutComRastreio(url: string) {
+  const vid =
+    (window as any).VirtusTrack?.visitorId ??
+    document.cookie.match(/(?:^|; )_vt_vid=([^;]*)/)?.[1] ??
+    null;
+  if (!vid) return url;
+  const u = new URL(url);
+  u.searchParams.set("src", `vid:${vid}`);
+  return u.toString();
+}
+
+function isHotmartCheckout(url: string) {
+  try {
+    return new URL(url).hostname === "pay.hotmart.com";
+  } catch {
+    return false;
+  }
+}
 
 function priceOriginal(o: Offer): string | null {
   if (o.price_original_text) return o.price_original_text;
@@ -106,6 +126,26 @@ export function TimedOffer({
     }).catch(() => {});
   }
 
+  function handleCheckoutClick(event: MouseEvent<HTMLAnchorElement>) {
+    trackClick();
+    if (locale !== "es" || !isHotmartCheckout(ctaHref)) return;
+
+    let trackedHref: string;
+    try {
+      trackedHref = checkoutComRastreio(ctaHref);
+    } catch {
+      return;
+    }
+    if (trackedHref === ctaHref) return;
+
+    event.preventDefault();
+    if (active.open_same_window) {
+      window.location.href = trackedHref;
+    } else {
+      window.open(trackedHref, "_blank", "noopener,noreferrer");
+    }
+  }
+
   return (
     <div
       className="animate-[slideUp_.35s_ease] rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-surface)] p-4 sm:p-5"
@@ -161,7 +201,7 @@ export function TimedOffer({
           href={ctaHref}
           target={active.open_same_window ? "_self" : "_blank"}
           rel="noopener noreferrer"
-          onClick={trackClick}
+          onClick={handleCheckoutClick}
           className={`${hwButton} animate-pulse text-center ${
             stacked ? "w-full" : "shrink-0 max-w-full"
           }`}
