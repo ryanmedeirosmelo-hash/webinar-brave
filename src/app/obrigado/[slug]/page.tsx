@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { displayTitle } from "@/components/Brand";
 import { HwPage } from "@/components/HwKit";
 import { SupportBox } from "@/components/SupportBox";
-import { TimedOffer } from "@/components/TimedOffer";
+import { ThankYouOffer } from "@/components/ThankYouOffer";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { supportWhatsAppNumber } from "@/lib/whatsapp";
 import type { Offer, Registration, Webinar } from "@/types/db";
@@ -10,6 +10,14 @@ import { publicLocaleFor } from "@/lib/public-locale";
 
 // Cada página é derivada do webinar solicitado; não pode reutilizar o HTML de outro slug.
 export const dynamic = "force-dynamic";
+
+const thankYouLanguageOverrides: Record<string, string> = {
+  "salud-natural": "es-ES",
+  "salud-natural-2": "es-ES",
+  higado: "es-ES",
+  "higado-2": "es-ES",
+  "webinar-br-grupo": "pt-BR",
+};
 
 export default async function ThankYouPage({
   params,
@@ -31,7 +39,8 @@ export default async function ThankYouPage({
   if (!webinar) notFound();
 
   const title = displayTitle(webinar.title);
-  const locale = publicLocaleFor(webinar.language);
+  const language = thankYouLanguageOverrides[slug] ?? webinar.language;
+  const locale = publicLocaleFor(language);
   const presenterName = webinar.presenter_name?.trim() || null;
   const brandName = presenterName || title;
   const requestedToken = typeof acesso === "string" ? acesso : null;
@@ -55,7 +64,7 @@ export default async function ThankYouPage({
       logoUrl={webinar.logo_url}
       brandName={brandName}
       presenterName={presenterName}
-      language={webinar.language}
+      language={language}
     >
       <main className="relative isolate min-h-[calc(100dvh-3.5rem)] overflow-hidden px-4 py-12 sm:px-6 sm:py-20">
         <div
@@ -92,40 +101,21 @@ export default async function ThankYouPage({
           </div>
 
           {(offers ?? []).some((offer) => !offer.disabled) && (
-            <section
-              id="oferta"
-              aria-labelledby="offer-heading"
-              className="mt-10 rounded-3xl border-2 border-[var(--hw-red)]/20 bg-[var(--hw-surface)] p-4 shadow-[0_24px_70px_-42px_rgba(255,0,0,0.6)] sm:p-5"
-            >
-              <div className="mb-4 text-center">
-                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[var(--hw-red)]">
-                  {locale === "es" ? "Oferta disponible" : "Oferta disponível"}
-                </p>
-                <h2
-                  id="offer-heading"
-                  className="mt-1 text-xl font-bold tracking-tight text-[var(--hw-text)]"
-                >
-                  {locale === "es" ? "Entra ahora y asegura tu plaza" : "Entre agora e garanta sua vaga"}
-                </h2>
-              </div>
-              <TimedOffer
-                offers={(offers ?? []) as Offer[]}
-                elapsed={webinar.duration_seconds - 1}
-                webinarId={webinar.id}
-                registrationToken={registration?.access_token ?? null}
-                sessionStartIso={registration?.scheduled_start_at ?? null}
-                previewMode={!registration}
-                forceVisible
-                stacked
-                language={webinar.language}
-              />
-            </section>
+            <ThankYouOffer
+              slug={webinar.slug}
+              offers={(offers ?? []) as Offer[]}
+              webinarId={webinar.id}
+              registrationToken={registration?.access_token ?? null}
+              sessionStartIso={registration?.scheduled_start_at ?? null}
+              previewMode={!registration}
+              language={language}
+            />
           )}
 
           <div className="mt-10">
             <SupportBox
               whatsapp={supportWhatsAppNumber(webinar.integrations)}
-              language={webinar.language}
+              language={language}
             />
           </div>
         </section>
