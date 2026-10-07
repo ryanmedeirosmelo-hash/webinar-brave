@@ -88,6 +88,7 @@ export function TimedOffer({
   const locale = publicLocaleFor(language);
   const active = findVisibleOffer(offers, elapsed, { forceVisible, stacked });
   if (!active) return null;
+  const selectedOffer = active;
 
   const img = active.image_desktop_url ?? active.image_url;
   const original = priceOriginal(active);
@@ -119,7 +120,7 @@ export function TimedOffer({
     }
     recordOfferClick({
       webinarId,
-      offerId: active!.id,
+      offerId: selectedOffer.id,
       registrationToken,
       anonId,
       sessionStartIso,
@@ -139,7 +140,7 @@ export function TimedOffer({
     if (trackedHref === ctaHref) return;
 
     event.preventDefault();
-    if (active.open_same_window) {
+    if (selectedOffer.open_same_window) {
       window.location.href = trackedHref;
     } else {
       window.open(trackedHref, "_blank", "noopener,noreferrer");
