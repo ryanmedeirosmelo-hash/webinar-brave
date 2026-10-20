@@ -49,11 +49,16 @@ export function ThankYouOffer({
     }
 
     const updateRemaining = () => {
-      setRemainingMs(Math.max(0, deadline - Date.now()));
+      const remaining = Math.max(0, deadline - Date.now());
+      setRemainingMs((previous) =>
+        Math.ceil(previous / 1000) === Math.ceil(remaining / 1000) ? previous : remaining
+      );
+      if (remaining === 0 && intervalId !== undefined) window.clearInterval(intervalId);
     };
 
+    let intervalId: number | undefined;
     updateRemaining();
-    const intervalId = window.setInterval(updateRemaining, 250);
+    if (deadline > Date.now()) intervalId = window.setInterval(updateRemaining, 250);
     return () => window.clearInterval(intervalId);
   }, [slug]);
 

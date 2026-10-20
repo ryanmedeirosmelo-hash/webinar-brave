@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, SalesNotification } from "@/types/db";
 import { HwAvatar, hwColorFor } from "./HwKit";
 import { publicLocaleFor } from "@/lib/public-locale";
@@ -65,6 +65,65 @@ function comLinks(texto: string) {
   });
 }
 
+const ChatRow = memo(function ChatRow({ item, salesTitle, presenterName, presenterAvatarUrl, locale }: {
+  item: Item;
+  salesTitle?: string | null;
+  presenterName?: string | null;
+  presenterAvatarUrl?: string | null;
+  locale: ReturnType<typeof publicLocaleFor>;
+}) {
+  return (
+    item.kind === "sale" ? (
+      // verde é o único desvio do vermelho: sinaliza conversão
+      <div
+        className="flex items-center gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 animate-[fadeIn_.3s_ease]"
+      >
+        <span className="text-base">🛒</span>
+        <div className="text-[13px] leading-tight">
+          {salesTitle && (
+            <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
+              {salesTitle}
+            </p>
+          )}
+          <p>
+            <b>{item.data.buyer_name}</b> {item.data.product_label}
+            {item.data.buyer_city && (
+              <span className="text-[var(--hw-muted)]"> · {item.data.buyer_city}</span>
+            )}
+          </p>
+        </div>
+      </div>
+    ) : (
+      <div className="flex items-start gap-2.5 animate-[fadeIn_.3s_ease]">
+        <HwAvatar
+          name={item.data.author_name}
+          size={30}
+          presenterName={presenterName}
+          presenterAvatarUrl={presenterAvatarUrl}
+        />
+        <div className="min-w-0">
+          <p
+            className="text-[13px] font-medium leading-tight"
+            style={{
+              color: item.data.own ? "var(--hw-red)" : hwColorFor(item.data.author_name),
+            }}
+          >
+            {item.data.author_name}
+            {item.data.own && (
+              <span className="ml-1.5 rounded bg-[var(--hw-red)] px-1.5 py-px text-[10px] font-bold uppercase text-white">
+                {locale === "es" ? "tú" : "você"}
+              </span>
+            )}
+          </p>
+          <p className="break-words text-[14px] leading-snug">
+            {comLinks(item.data.message)}
+          </p>
+        </div>
+      </div>
+    )
+  );
+});
+
 export function SimulatedChat({
   messages,
   sales,
@@ -100,7 +159,7 @@ export function SimulatedChat({
 
   const myName = displayName(viewerName?.trim() || (locale === "es" ? "Tú" : "Você"));
 
-  const visible = useMemo<Item[]>(() => {
+  const timeline = useMemo<Item[]>(() => {
     const items: Item[] = [
       ...messages.map((m): Item => ({
         kind: "msg",
@@ -116,8 +175,18 @@ export function SimulatedChat({
       })),
       ...sales.map((s): Item => ({ kind: "sale", id: s.id, at: s.at_seconds, data: s })),
     ];
-    return items.filter((i) => i.at <= elapsed).sort((a, b) => a.at - b.at);
-  }, [messages, mine, sales, elapsed, myName]);
+    return items.sort((a, b) => a.at - b.at);
+  }, [messages, mine, sales, myName]);
+
+  // Only locate the visible boundary on each tick; normalize and sort when data changes.
+  let low = 0;
+  let high = timeline.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (timeline[middle].at <= elapsed) low = middle + 1;
+    else high = middle;
+  }
+  const visible = useMemo(() => timeline.slice(0, low), [timeline, low]);
 
   useEffect(() => {
     const el = boxRef.current;
@@ -156,57 +225,16 @@ export function SimulatedChat({
               : "As mensagens aparecerão durante a aula…"}
           </p>
         )}
-        {visible.map((item) =>
-          item.kind === "sale" ? (
-            // verde é o único desvio do vermelho: sinaliza conversão
-            <div
-              key={item.id}
-              className="flex items-center gap-2.5 rounded-xl border border-emerald-500/25 bg-emerald-500/10 px-3 py-2.5 animate-[fadeIn_.3s_ease]"
-            >
-              <span className="text-base">🛒</span>
-              <div className="text-[13px] leading-tight">
-                {salesTitle && (
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-emerald-600">
-                    {salesTitle}
-                  </p>
-                )}
-                <p>
-                  <b>{item.data.buyer_name}</b> {item.data.product_label}
-                  {item.data.buyer_city && (
-                    <span className="text-[var(--hw-muted)]"> · {item.data.buyer_city}</span>
-                  )}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div key={item.id} className="flex items-start gap-2.5 animate-[fadeIn_.3s_ease]">
-              <HwAvatar
-                name={item.data.author_name}
-                size={30}
-                presenterName={presenterName}
-                presenterAvatarUrl={presenterAvatarUrl}
-              />
-              <div className="min-w-0">
-                <p
-                  className="text-[13px] font-medium leading-tight"
-                  style={{
-                    color: item.data.own ? "var(--hw-red)" : hwColorFor(item.data.author_name),
-                  }}
-                >
-                  {item.data.author_name}
-                  {item.data.own && (
-                    <span className="ml-1.5 rounded bg-[var(--hw-red)] px-1.5 py-px text-[10px] font-bold uppercase text-white">
-                      {locale === "es" ? "tú" : "você"}
-                    </span>
-                  )}
-                </p>
-                <p className="break-words text-[14px] leading-snug">
-                  {comLinks(item.data.message)}
-                </p>
-              </div>
-            </div>
-          )
-        )}
+        {visible.map((item) => (
+          <ChatRow
+            key={`${item.kind}:${item.id}`}
+            item={item}
+            salesTitle={salesTitle}
+            presenterName={presenterName}
+            presenterAvatarUrl={presenterAvatarUrl}
+            locale={locale}
+          />
+        ))}
       </div>
 
       <form onSubmit={submit} className="flex items-center gap-2 border-t border-[var(--hw-border)] p-3">

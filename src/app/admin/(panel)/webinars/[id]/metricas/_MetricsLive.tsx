@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getWebinarMetrics, type WebinarMetrics } from "@/app/admin/actions";
+import { startVisiblePolling } from "@/lib/visible-polling";
 import { card } from "../_steps";
 
 function pct(part: number, whole: number) {
@@ -38,16 +39,16 @@ export function MetricsLive({
   useEffect(() => {
     let alive = true;
     const poll = () => {
-      getWebinarMetrics(webinarId)
+      return getWebinarMetrics(webinarId)
         .then((next) => {
           if (alive) setM(next);
         })
         .catch(() => {});
     };
-    const id = setInterval(poll, 10_000);
+    const stop = startVisiblePolling(poll, 10_000);
     return () => {
       alive = false;
-      clearInterval(id);
+      stop();
     };
   }, [webinarId]);
 

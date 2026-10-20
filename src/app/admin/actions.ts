@@ -8,7 +8,6 @@ import { phoneKey } from "@/lib/phone";
 import { getInvitedPhonesByDay } from "@/app/admin/disparos";
 import type { Webinar } from "@/types/db";
 import { ADMIN_TIMEZONE } from "@/lib/brand";
-import * as XLSX from "xlsx";
 
 function slugify(input: string) {
   return input
@@ -424,8 +423,9 @@ function parseChatImportText(csv: string): ChatImportParseResult {
   return { rows, invalidRows };
 }
 
-function parseChatImportWorkbook(buffer: ArrayBuffer): ChatImportParseResult {
+async function parseChatImportWorkbook(buffer: ArrayBuffer): Promise<ChatImportParseResult> {
   try {
+    const XLSX = await import("xlsx");
     const workbook = XLSX.read(buffer, { type: "array", cellDates: false });
     const firstSheetName = workbook.SheetNames[0];
     if (!firstSheetName) {
@@ -529,7 +529,7 @@ export async function importChatCsv(
     if (fileEntry.size > CHAT_IMPORT_MAX_FILE_BYTES) {
       return { error: "O arquivo excede o limite de 10 MB." };
     }
-    parsed = parseChatImportWorkbook(await fileEntry.arrayBuffer());
+    parsed = await parseChatImportWorkbook(await fileEntry.arrayBuffer());
   } else {
     if (!csv) {
       return { error: "Cole mensagens ou selecione um arquivo Excel antes de importar." };
@@ -848,11 +848,13 @@ export type WebinarMetrics = {
 export async function getWebinarMetrics(webinarId: string): Promise<WebinarMetrics> {
   const supabase = supabaseAdmin();
 
-  const { data: w } = await supabase
-    .from("webinars")
-    .select("duration_seconds")
-    .eq("id", webinarId)
-    .single<{ duration_seconds: number }>();
+  const registrationCount = supabase.from("registrations")
+    .select("id", { count: "exact", head: true }).eq("webinar_id", webinarId).then((result) => result);
+  const [{ data: w }, hasMinutes] = await Promise.all([
+    supabase.from("webinars").select("duration_seconds").eq("id", webinarId)
+      .single<{ duration_seconds: number }>(),
+    hasMinutesColumn(supabase),
+  ]);
   const duration = w?.duration_seconds ?? 0;
   const endThreshold = Math.max(0, duration - 120); // últimos 2min = "até o fim"
   const liveCutoffMs = Date.now() - 60_000; // ativo nos últimos 60s
@@ -873,13 +875,10 @@ export async function getWebinarMetrics(webinarId: string): Promise<WebinarMetri
 
   const cols =
     "first_seen_at, last_seen_at, last_position_seconds, session_start, country, region, city, device, os, browser" +
-    ((await hasMinutesColumn(supabase)) ? ", minutes" : "");
+    (hasMinutes ? ", minutes" : "");
 
   const [{ count: registered }, allRows] = await Promise.all([
-    supabase
-      .from("registrations")
-      .select("id", { count: "exact", head: true })
-      .eq("webinar_id", webinarId),
+    registrationCount,
     fetchAll<Row>((from, to) =>
       supabase
         .from("watch_sessions")
@@ -1727,7 +1726,10 @@ export async function getLiveWatchState(): Promise<LiveWatchState> {
   const cutoff = new Date(now - 60_000).toISOString(); // ativo nos últimos 60s
 
   const [{ data: webinars }, { data: active }] = await Promise.all([
-    supabase.from("webinars").select("*").eq("status", "active").returns<Webinar[]>(),
+    supabase.from("webinars")
+      .select("id, type, jit_interval_minutes, available_times, timezone, start_at, duration_seconds, recurrence_enabled, recurrence_freq, recurrence_days")
+      .eq("status", "active")
+      .returns<(Parameters<typeof nextSessionStart>[0] & { id: string })[]>(),
     supabase
       .from("watch_sessions")
       .select("webinar_id")

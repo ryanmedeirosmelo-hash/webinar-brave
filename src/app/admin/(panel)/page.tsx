@@ -56,15 +56,17 @@ const actionBtn =
 
 export default async function AdminWebinarsPage() {
   const supabase = supabaseAdmin();
-  const { data: webinars } = await supabase
-    .from("webinars")
-    .select("*")
-    .order("created_at", { ascending: false })
-    .returns<Webinar[]>();
+  const [{ data: webinars }, liveState] = await Promise.all([
+    supabase
+      .from("webinars")
+      .select("id, title, internal_name, slug, duration_seconds, status, type")
+      .order("created_at", { ascending: false })
+      .returns<Pick<Webinar, "id" | "title" | "internal_name" | "slug" | "duration_seconds" | "status" | "type">[]>(),
+    getLiveWatchState(),
+  ]);
 
   const list = webinars ?? [];
   const activeCount = list.filter((w) => w.status === "active").length;
-  const liveState = await getLiveWatchState();
   const liveNowCount = Object.values(liveState).filter((s) => s.isLive).length;
 
   return (

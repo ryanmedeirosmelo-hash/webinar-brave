@@ -3,6 +3,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { getLiveWatchState, type LiveWatchState } from "@/app/admin/actions";
 
+import { startVisiblePolling } from "@/lib/visible-polling";
+
 const Ctx = createContext<LiveWatchState>({});
 
 /**
@@ -24,15 +26,21 @@ export function LiveWatchProvider({
     const tick = async () => {
       try {
         const next = await getLiveWatchState();
-        if (alive) setState(next);
+        if (alive) setState((current) => {
+          const ids = Object.keys(next);
+          const unchanged = ids.length === Object.keys(current).length && ids.every((id) =>
+            current[id]?.watching === next[id].watching && current[id]?.isLive === next[id].isLive
+          );
+          return unchanged ? current : next;
+        });
       } catch {
         /* rede caiu; mantém o último estado e tenta de novo */
       }
     };
-    const id = setInterval(tick, 15_000);
+    const stop = startVisiblePolling(tick, 15_000);
     return () => {
       alive = false;
-      clearInterval(id);
+      stop();
     };
   }, []);
 

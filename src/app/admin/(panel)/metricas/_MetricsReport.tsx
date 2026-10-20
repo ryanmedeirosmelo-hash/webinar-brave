@@ -12,6 +12,7 @@ import {
   type RetentionCurvePoint,
 } from "@/app/admin/actions";
 import { displayTitle } from "@/components/Brand";
+import { startVisiblePolling } from "@/lib/visible-polling";
 import { ADMIN_TIMEZONE } from "@/lib/brand";
 
 const card =
@@ -278,29 +279,24 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           if (!cancelled) setDetail(d);
         })
         .catch(() => {});
-    load();
-    // Uma live encerrada não muda: reabrir o mesmo detalhe a cada 10 s faz a
-    // curva parecer instável, sem trazer informação nova.
-    if (!selectedIsLive) {
-      return () => {
-        cancelled = true;
-      };
-    }
-    const id = setInterval(load, POLL_MS);
+    const stop = startVisiblePolling(load, POLL_MS, { immediate: true, repeat: selectedIsLive });
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
     };
   }, [selected, selectedIsLive]);
 
   // poll da lista de lives (conta novas lives / atualiza números)
   useEffect(() => {
-    const id = setInterval(() => {
-      getAllLives()
-        .then((next) => setLives((current) => (sameLives(current, next) ? current : next)))
-        .catch(() => {});
+    let cancelled = false;
+    const stop = startVisiblePolling(async () => {
+      const next = await getAllLives();
+      if (!cancelled) setLives((current) => (sameLives(current, next) ? current : next));
     }, POLL_MS);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      stop();
+    };
   }, []);
 
   const filtered = useMemo(
@@ -342,16 +338,10 @@ export function MetricsReport({ lives: initialLives }: { lives: LiveRow[] }) {
           if (!cancelled) setAggregateRetention({ lives: 0, plays: 0, curve: [] });
         });
     if (changedFilter) setAggregateRetention(null);
-    load();
-    if (!hasLiveInFiltered) {
-      return () => {
-        cancelled = true;
-      };
-    }
-    const id = setInterval(load, POLL_MS);
+    const stop = startVisiblePolling(load, POLL_MS, { immediate: true, repeat: hasLiveInFiltered });
     return () => {
       cancelled = true;
-      clearInterval(id);
+      stop();
     };
   }, [retentionRequest, retentionRequestKey, hasLiveInFiltered]);
 
