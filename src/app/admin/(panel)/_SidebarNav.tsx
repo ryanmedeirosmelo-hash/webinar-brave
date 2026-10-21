@@ -32,6 +32,7 @@ const ITEMS: Item[] = [
     icon: "send",
     match: (p) => p.startsWith("/admin/disparos"),
   },
+  { href: "/admin/testes-ab", label: "Testes A/B", icon: "chart", match: (p) => p.startsWith("/admin/testes-ab") },
   { href: "#", label: "Configurações", icon: "settings", soon: true },
 ];
 
