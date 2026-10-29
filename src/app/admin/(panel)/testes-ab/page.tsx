@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { publicLeadOrigin } from "@/lib/public-links";
 import { PublicLinkActions } from "@/components/PublicLinkActions";
+import { AB_PAGES, abPublicPath } from "@/lib/ab-links";
 import type { ABTest } from "@/lib/ab-tests";
 import { TestForm, type WebinarOption } from "./_TestForm";
 
@@ -22,7 +23,7 @@ export default async function ABTestsPage() {
   return (
     <div className="mx-auto max-w-5xl p-5 md:p-8">
       <h1 className="text-2xl font-bold text-white">Testes A/B</h1>
-      <p className="mt-2 max-w-2xl text-sm text-slate-400">Compartilhe um único link e escolha a porcentagem de visitantes destinada a cada webinar.</p>
+      <p className="mt-2 max-w-2xl text-sm text-slate-400">Escolha a divisão de visitantes e compartilhe o link adequado para cada etapa da campanha.</p>
       {unavailable ? <div role="alert" className="mt-7 rounded-xl border border-amber-500/30 bg-amber-500/10 p-5 text-sm text-amber-200">Não foi possível carregar o módulo. Verifique a conexão e se a migração webinar_ab_tests foi aplicada ao banco.</div> : <>
         <section className="mt-7 rounded-xl border border-slate-800 bg-slate-900/50 p-5 md:p-6">
           <h2 className="mb-5 text-lg font-semibold text-white">Novo teste</h2>
@@ -35,7 +36,19 @@ export default async function ABTestsPage() {
           const total = testCounts.reduce((sum, c) => sum + Number(c.visitors), 0);
           return <article key={test.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-5 md:p-6">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-white">{test.name}</h3><span className={`rounded-full px-3 py-1 text-xs ${test.active ? "bg-emerald-500/10 text-emerald-300" : "bg-slate-800 text-slate-400"}`}>{test.active ? "Em andamento" : "Pausado"}</span></div>
-            <PublicLinkActions path={`/ab/${test.id}`} origin={publicLeadOrigin()} pageName="teste" />
+            <section aria-label={`Links de ${test.name}`} className="mb-5">
+              <h4 className="text-sm font-semibold text-white">Links do teste</h4>
+              <p className="mt-1 text-xs leading-5 text-slate-400">Todos os links mantêm a divisão do teste e a mesma variante para quem retorna. Personalize os endereços em “Editar teste e links”.</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">{AB_PAGES.map(page => {
+                const path = abPublicPath(test, page.key);
+                return <div key={page.key} className="min-w-0 rounded-xl border border-slate-800 bg-slate-950/35 p-4">
+                  <p className="text-sm font-semibold text-slate-100">{page.name}</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">{page.hint}</p>
+                  <code className="my-3 block break-all rounded bg-slate-950 px-2 py-2 text-xs text-slate-300">{publicLeadOrigin() ? new URL(path, publicLeadOrigin()!).toString() : path}</code>
+                  <PublicLinkActions path={path} origin={publicLeadOrigin()} pageName={page.name.toLowerCase()} />
+                </div>;
+              })}</div>
+            </section>
             <p className="mt-4 text-sm text-slate-300">{total.toLocaleString("pt-BR")} visitantes distribuídos</p>
             <div className="my-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead className="text-xs text-slate-500"><tr><th className="py-2">Webinar</th><th className="px-3">Meta</th><th className="px-3">Visitantes</th><th className="px-3">Real</th></tr></thead><tbody>{Array.from(new Set([...test.variants.map(v => v.webinar_id), ...testCounts.map(c => c.webinar_id)])).map(id => {
               const variant = test.variants.find(v => v.webinar_id === id);
@@ -44,7 +57,7 @@ export default async function ABTestsPage() {
               return <tr key={id} className="border-t border-slate-800 text-slate-300"><td className="py-3">{webinar?.internal_name || webinar?.title || "Webinar indisponível"}{!variant && " (removido do teste)"}</td><td className="px-3">{variant?.weight ?? 0}%</td><td className="px-3">{count.toLocaleString("pt-BR")}</td><td className="px-3">{total ? (count / total * 100).toFixed(1) : "0"}%</td></tr>;
             })}</tbody></table></div>
             <p className="mb-4 text-xs text-slate-500">Contagem por navegador, sem inscrições ou vendas atribuídas. Acessos diretos aos webinars não entram no teste. Atualize a página para ver novas contagens.</p>
-            <details className="border-t border-slate-800 pt-4"><summary className="cursor-pointer text-sm text-[#cbad78]">Editar divisão e status</summary><div className="mt-5"><TestForm webinars={webinars} test={test} /></div></details>
+            <details className="border-t border-slate-800 pt-4"><summary className="cursor-pointer text-sm text-[#cbad78]">Editar teste e links</summary><div className="mt-5"><TestForm webinars={webinars} test={test} /></div></details>
           </article>;
         })}</div>
       </>}

@@ -23,3 +23,13 @@ As tabelas têm RLS e acesso revogado para `anon` e `authenticated`. As funçõe
 - A integração foi verificada em PostgreSQL temporário com PGlite, incluindo pesos 0/100, visitante recorrente, alterações de pesos, pausa, webinar inativo, contagens e permissões. Isso não substitui a conferência do ambiente publicado.
 - Verificação de tipos, ESLint dos arquivos alterados e compilação de produção (`next build --webpack`) passaram em cópia temporária do código com dependências instaladas. A cópia foi usada porque as leituras de alguns arquivos locais estavam travando.
 - Migração aplicada em 21/10/2026 no Supabase `webinar_brave` (`cxjkkuyimuvcsheawdsn`). Tabelas, RLS e permissões das funções verificadas no ambiente remoto. Publicação do aplicativo acompanhada pelo status do commit no GitHub.
+
+## Links por etapa
+
+Cada teste exibe links de página principal, sala de espera, entrada direta, cadastro, obrigado e captura. Copiar e visualizar ficam disponíveis em cada cartão. O parâmetro `pagina` seleciona a etapa, sem alterar os pesos ou a variante do visitante; UTMs e outros parâmetros seguem para o destino, e `pagina` é removido.
+
+Em **Editar teste e links**, personalize a **URL amigável do teste**, por exemplo `campanha-outubro`. Os links passam a usar `/ab/campanha-outubro?pagina=captura` e `/ab/campanha-outubro?pagina=obrigado`. O nome é exclusivo, aceita letras minúsculas, números e hífens e vale para todas as etapas. O link fixo com UUID continua válido. Ao trocar o nome, é necessário atualizar os endereços amigáveis já distribuídos.
+
+As páginas e o conteúdo continuam sendo os do webinar escolhido: a edição aqui altera o endereço compartilhado do teste, não o conteúdo nem URLs externas. Os links específicos também aceitam webinars Just in Time, respeitando o próximo horário de início. A identificação do visitante é compartilhada entre todas as etapas e nomes do mesmo teste; cookies antigos são migrados pela entrada com UUID.
+
+A migração `20261029140209_webinar_ab_public_links.sql` adiciona o endereço amigável opcional sem mudar testes ou distribuições existentes.

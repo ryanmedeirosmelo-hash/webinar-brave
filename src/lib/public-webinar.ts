@@ -9,14 +9,13 @@ export type PublicWebinarRoomData = {
   sales: SalesNotification[];
 };
 
-/** Webinars únicos ativos que podem ser expostos pelos links públicos do painel. */
+/** Webinars ativos disponíveis nas páginas públicas de captura, cadastro e sala. */
 export async function getActiveSingleWebinar(slug: string): Promise<Webinar | null> {
   const { data } = await supabaseAdmin()
     .from("webinars")
     .select("*")
     .eq("slug", slug)
     .eq("status", "active")
-    .eq("type", "unico")
     .maybeSingle<Webinar>();
 
   return data ?? null;
@@ -64,7 +63,7 @@ export function singleWebinarStartAt(webinar: Webinar): string {
   // Quando a repetição está ativa, `start_at` define só a primeira referência
   // de horário. A sala precisa acompanhar a ocorrência atual/próxima, não ficar
   // presa à data original depois do primeiro sábado.
-  if (webinar.recurrence_enabled) return nextSessionStart(webinar).toISOString();
+  if (webinar.type === "just_in_time" || webinar.recurrence_enabled) return nextSessionStart(webinar).toISOString();
 
   if (webinar.start_at && !Number.isNaN(new Date(webinar.start_at).getTime())) {
     return webinar.start_at;

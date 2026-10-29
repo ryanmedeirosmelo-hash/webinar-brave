@@ -13,7 +13,7 @@ export async function saveABTest(_: ABActionState, form: FormData): Promise<ABAc
   let variants: unknown;
   try { variants = JSON.parse(String(form.get("variants"))); }
   catch { return { error: "Revise as variantes do teste." }; }
-  const parsed = abTestSchema.safeParse({ name: form.get("name"), variants });
+  const parsed = abTestSchema.safeParse({ name: form.get("name"), slug: form.get("slug") ?? "", variants });
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const id = String(form.get("id") ?? "");
   if (id && !z.uuid().safeParse(id).success) return { error: "Teste inválido." };
@@ -26,9 +26,10 @@ export async function saveABTest(_: ABActionState, form: FormData): Promise<ABAc
     return { error: "Um dos webinars não existe mais. Revise as variantes." };
   if (active && parsed.data.variants.some(v => v.weight > 0 && webinars.some(w => w.id === v.webinar_id && w.status !== "active")))
     return { error: "As variantes que recebem tráfego precisam usar webinars ativos." };
-  const payload = { ...parsed.data, active };
+  const payload = { ...parsed.data, slug: parsed.data.slug || null, active };
   const query = id ? db.from("webinar_ab_tests").update(payload).eq("id", id) : db.from("webinar_ab_tests").insert(payload);
   const { data, error } = await query.select("id").single();
+  if (error?.code === "23505") return { error: "Este endereço já está em uso por outro teste. Escolha outro." };
   if (error || !data) return { error: "Não foi possível salvar o teste. Verifique se a migração do módulo foi aplicada." };
   revalidatePath("/admin/testes-ab");
   return { success: id ? "Teste atualizado." : "Teste criado. O link está na lista abaixo." };

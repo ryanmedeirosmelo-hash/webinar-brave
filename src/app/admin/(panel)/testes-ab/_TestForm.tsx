@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { saveABTest } from "./actions";
+import { abPublicPath } from "@/lib/ab-links";
 import type { ABTest, ABActionState } from "@/lib/ab-tests";
 
 export type WebinarOption = { id: string; title: string; internal_name: string | null; status: string };
@@ -25,6 +26,11 @@ export function TestForm({ webinars, test }: { webinars: WebinarOption[]; test?:
       <label className="block text-sm text-slate-300">Nome do teste
         <input name="name" required maxLength={100} defaultValue={test?.name} placeholder="Ex.: Aula original × nova apresentação" className={`${control} mt-2`} />
       </label>
+      <label className="block text-sm text-slate-300">URL amigável do teste
+        <div className="mt-2 flex items-center gap-2"><span className="text-slate-400">/ab/</span><input name="slug" maxLength={80} pattern="[a-z0-9]+(-[a-z0-9]+)*" defaultValue={test?.slug ?? ""} placeholder="nome-do-teste" className={control} /></div>
+        <span className="mt-2 block text-xs leading-5 text-slate-400">Use letras minúsculas, números e hífens. Deixe vazio para usar o endereço automático. Este nome vale para todos os links do teste.</span>
+      </label>
+      {test && <p className="text-xs leading-5 text-slate-400">Ao mudar o endereço, atualize os links já compartilhados. O link fixo <span className="break-all">{abPublicPath({ id: test.id }, "principal")}</span> continua funcionando.</p>}
       <div className="space-y-3">
         {variants.map((variant, index) => (
           <div key={index} className="grid grid-cols-[minmax(0,1fr)_90px_auto] items-end gap-3">
