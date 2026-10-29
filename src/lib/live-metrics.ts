@@ -1,0 +1,5 @@
+export type LiveAttendeeRow = { id: string; name: string; location: string; device: string | null; position_seconds: number; observed_seconds: number; last_seen_at: string; session_start: string | null };
+export type LiveSnapshot = { webinar_id: string; title: string | null; watching_now: number; entered: number; registered: number; reached_end: number; offer_clicks: number; average_seconds: number; updated_at: string; locations: { label: string; count: number }[]; attendees: LiveAttendeeRow[]; weight?: number; assigned?: number; tracked_assigned?: number; removed?: boolean };
+export type LiveDashboardData = { id: string; kind: "webinar" | "test"; title: string; updated_at: string; metrics_started_at?: string; variants: LiveSnapshot[] };
+export function metricRate(part: number, total: number) { return total > 0 ? `${(part / total * 100).toFixed(1)}%` : "—"; }
+export function observedTime(seconds: number) { const n = Math.max(0, Math.round(seconds)); return `${Math.floor(n / 60)}m ${String(n % 60).padStart(2, "0")}s`; }

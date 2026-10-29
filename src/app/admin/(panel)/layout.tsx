@@ -7,7 +7,7 @@ import { SidebarNav } from "./_SidebarNav";
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-full grid grid-cols-[240px_1fr]">
+    <div className="min-h-full grid grid-cols-1 md:grid-cols-[240px_minmax(0,1fr)]">
       <aside className="flex flex-col border-r border-slate-800/80 bg-slate-950/80 backdrop-blur px-4 py-6">
         <Link href="/admin" className="flex flex-col items-center gap-2 px-2 mb-8 pt-2">
           <AdminBrand />

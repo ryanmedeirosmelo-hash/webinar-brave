@@ -39,13 +39,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: slug, error } = await db.rpc("assign_webinar_ab", { p_test_id: testId, p_visitor_id: visitor });
   if (error) { console.error("AB assignment failed", error.code); return unavailable(503); }
   if (!slug || typeof slug !== "string") return unavailable();
+  const { error: exposureError } = await db.rpc("record_webinar_ab_exposure", { p_test_id: testId, p_visitor_id: visitor });
+  if (exposureError) console.error("AB exposure failed", exposureError.code);
   const target = request.nextUrl.clone();
   target.pathname = abDestinationPath(slug, page);
   target.searchParams.delete("pagina");
   const response = NextResponse.redirect(target, 302);
   response.headers.set("Cache-Control", "private, no-store");
   response.headers.set("Vary", "Cookie");
-  response.cookies.set(cookieName, visitor, { httpOnly: true, secure: request.nextUrl.protocol === "https:", sameSite: "lax", path: "/ab", maxAge: 60 * 60 * 24 * 365 });
+  response.cookies.set(cookieName, visitor, { httpOnly: true, secure: request.nextUrl.protocol === "https:", sameSite: "lax", path: "/", maxAge: 60 * 60 * 24 * 365 });
+  response.headers.append("Set-Cookie", `${cookieName}=; Path=/ab; Max-Age=0; HttpOnly; SameSite=Lax${request.nextUrl.protocol === "https:" ? "; Secure" : ""}`);
   response.headers.append("Set-Cookie", `${cookieName}=; Path=/ab/${testId}; Max-Age=0; HttpOnly; SameSite=Lax${request.nextUrl.protocol === "https:" ? "; Secure" : ""}`);
   return response;
 }

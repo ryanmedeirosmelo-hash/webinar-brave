@@ -1,5 +1,6 @@
 "use server";
 
+import { attributeAB } from "@/lib/ab-attribution";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { randomUUID } from "crypto";
@@ -307,7 +308,10 @@ export async function createRegistration(
     .limit(1)
     .maybeSingle<{ access_token: string }>();
 
-  if (existing?.access_token) redirect(`/watch/${existing.access_token}`);
+  if (existing?.access_token) {
+    await attributeAB(webinar.id, { registrationToken: existing.access_token });
+    redirect(`/watch/${existing.access_token}`);
+  }
 
   const { data: reg, error: rErr } = await storeRegistration(
     webinar,
@@ -323,6 +327,7 @@ export async function createRegistration(
 
   // Antes da aula, a pessoa segue direto para a sala: ela mostra a contagem
   // regressiva até o horário marcado. A página final só aparece após o término.
+  await attributeAB(webinar.id, { registrationToken: reg.access_token });
   redirect(`/watch/${reg.access_token}`);
 }
 
@@ -387,6 +392,7 @@ export async function registerForSession(input: {
     .maybeSingle();
 
   if (existing?.access_token) {
+    await attributeAB(webinar.id, { registrationToken: existing.access_token });
     return { ok: true, token: existing.access_token, scheduledStartAtIso: iso };
   }
 
@@ -400,5 +406,6 @@ export async function registerForSession(input: {
     return { ok: false, error: "Não foi possível concluir a inscrição. Tente de novo." };
   }
 
+  await attributeAB(webinar.id, { registrationToken: reg.access_token });
   return { ok: true, token: reg.access_token, scheduledStartAtIso: iso };
 }

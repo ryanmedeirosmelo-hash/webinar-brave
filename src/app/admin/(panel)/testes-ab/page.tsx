@@ -36,6 +36,7 @@ export default async function ABTestsPage() {
           const total = testCounts.reduce((sum, c) => sum + Number(c.visitors), 0);
           return <article key={test.id} className="rounded-xl border border-slate-800 bg-slate-900/50 p-5 md:p-6">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold text-white">{test.name}</h3><span className={`rounded-full px-3 py-1 text-xs ${test.active ? "bg-emerald-500/10 text-emerald-300" : "bg-slate-800 text-slate-400"}`}>{test.active ? "Em andamento" : "Pausado"}</span></div>
+            <div className="mb-5 flex flex-wrap gap-3"><Link href={`/admin/testes-ab/${test.id}/metricas`} className="rounded-lg border border-[#cbad78]/50 px-4 py-3 text-sm text-[#cbad78]">Comparar métricas</Link><Link href={`/admin/testes-ab/${test.id}/ao-vivo`} className="rounded-lg border border-emerald-500/40 px-4 py-3 text-sm text-emerald-300">Audiência ao vivo</Link></div>
             <section aria-label={`Links de ${test.name}`} className="mb-5">
               <h4 className="text-sm font-semibold text-white">Links do teste</h4>
               <p className="mt-1 text-xs leading-5 text-slate-400">Todos os links mantêm a divisão do teste e a mesma variante para quem retorna. Personalize os endereços em “Editar teste e links”.</p>

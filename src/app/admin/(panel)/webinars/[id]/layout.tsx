@@ -36,7 +36,8 @@ export default async function WebinarWizardLayout({
             {w.internal_name || displayTitle(w.title)}
           </h1>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/admin/ao-vivo/${w.id}`} className="rounded-lg border border-emerald-500/40 px-3 py-2 text-sm text-emerald-300 hover:bg-emerald-500/10">Audiência ao vivo</Link>
           <Link
             href={`/${w.slug}`}
             target="_blank"

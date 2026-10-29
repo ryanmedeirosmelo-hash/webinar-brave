@@ -1,5 +1,6 @@
 "use server";
 
+import { attributeAB } from "@/lib/ab-attribution";
 import { headers } from "next/headers";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { parseClientInfo } from "@/lib/client-info";
@@ -32,11 +33,15 @@ async function writeBeat(row: Record<string, unknown>, positionSeconds: number) 
   };
 
   const { error } = await supabase.rpc("record_watch_beat", { p: payload });
-  if (!error) return;
+  if (!error) {
+    await attributeAB(String(row.webinar_id), { viewerKey: String(row.viewer_key) });
+    return;
+  }
 
   // fallback (função ausente): upsert direto, como antes.
   const legacy = { ...full, last_seen_at: new Date().toISOString() };
-  await supabase.from("watch_sessions").upsert(legacy, { onConflict: "viewer_key" });
+  const { error: fallbackError } = await supabase.from("watch_sessions").upsert(legacy, { onConflict: "viewer_key" });
+  if (!fallbackError) await attributeAB(String(row.webinar_id), { viewerKey: String(row.viewer_key) });
 }
 
 /**
