@@ -73,7 +73,7 @@ export default async function StepOferta({
         </div>
 
         <div className="space-y-2.5 border-t border-slate-800 pt-4">
-          <Toggle name="utm_passthrough" defaultChecked={o?.utm_passthrough ?? true} label="Repassar UTM's pro link da oferta" />
+          <p className="text-xs leading-5 text-slate-400">O botão abre exatamente o link cadastrado, sem acrescentar parâmetros de rastreio.</p>
           <Toggle name="disabled" defaultChecked={o?.disabled ?? false} label="Desabilitar oferta" />
           <Toggle name="open_same_window" defaultChecked={o?.open_same_window ?? false} label="Abrir o link na mesma janela do webinar" />
           <Toggle name="raffle_enabled" defaultChecked={o?.raffle_enabled ?? false} label="Habilitar sorteio" />

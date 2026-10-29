@@ -3,27 +3,7 @@
 import { recordOfferClick } from "@/app/actions/offer-clicks";
 import { publicLocaleFor } from "@/lib/public-locale";
 import { hwButton } from "./HwKit";
-import type { MouseEvent } from "react";
 import type { Offer } from "@/types/db";
-
-function checkoutComRastreio(url: string) {
-  const vid =
-    (window as any).VirtusTrack?.visitorId ??
-    document.cookie.match(/(?:^|; )_vt_vid=([^;]*)/)?.[1] ??
-    null;
-  if (!vid) return url;
-  const u = new URL(url);
-  u.searchParams.set("src", `vid:${vid}`);
-  return u.toString();
-}
-
-function isHotmartCheckout(url: string) {
-  try {
-    return new URL(url).hostname === "pay.hotmart.com";
-  } catch {
-    return false;
-  }
-}
 
 function priceOriginal(o: Offer): string | null {
   if (o.price_original_text) return o.price_original_text;
@@ -94,18 +74,8 @@ export function TimedOffer({
   const original = priceOriginal(active);
   const offerPrice = priceOffer(active);
 
-  // Anexa o rastreio `sck` ao checkout (Hotmart devolve no webhook) → a compra
-  // volta atribuída EXATAMENTE a esta live. Sem contexto, o link fica intacto.
-  let ctaHref = active.cta_url;
-  if (webinarId && !previewMode) {
-    try {
-      const u = new URL(active.cta_url);
-      u.searchParams.set("sck", `aw|${webinarId}|${sessionStartIso ?? ""}`);
-      ctaHref = u.toString();
-    } catch {
-      /* URL fora do padrão: não mexe */
-    }
-  }
+  // Abra exatamente o endereço cadastrado, sem acrescentar rastreio ao checkout.
+  const ctaHref = active.cta_url;
 
   function trackClick() {
     if (previewMode || !webinarId) return; // preview/admin não conta conversão
@@ -125,26 +95,6 @@ export function TimedOffer({
       anonId,
       sessionStartIso,
     }).catch(() => {});
-  }
-
-  function handleCheckoutClick(event: MouseEvent<HTMLAnchorElement>) {
-    trackClick();
-    if (locale !== "es" || !isHotmartCheckout(ctaHref)) return;
-
-    let trackedHref: string;
-    try {
-      trackedHref = checkoutComRastreio(ctaHref);
-    } catch {
-      return;
-    }
-    if (trackedHref === ctaHref) return;
-
-    event.preventDefault();
-    if (selectedOffer.open_same_window) {
-      window.location.href = trackedHref;
-    } else {
-      window.open(trackedHref, "_blank", "noopener,noreferrer");
-    }
   }
 
   return (
@@ -202,7 +152,7 @@ export function TimedOffer({
           href={ctaHref}
           target={active.open_same_window ? "_self" : "_blank"}
           rel="noopener noreferrer"
-          onClick={handleCheckoutClick}
+          onClick={trackClick}
           className={`${hwButton} animate-pulse text-center ${
             stacked ? "w-full" : "shrink-0 max-w-full"
           }`}
