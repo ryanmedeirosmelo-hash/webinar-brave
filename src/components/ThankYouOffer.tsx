@@ -62,8 +62,6 @@ export function ThankYouOffer({
     return () => window.clearInterval(intervalId);
   }, [slug]);
 
-  const expired = remainingMs <= 0;
-
   return (
     <section
       id="oferta"
@@ -92,23 +90,17 @@ export function ThankYouOffer({
         </p>
       </div>
 
-      {expired ? (
-        <p className="rounded-2xl border border-[var(--hw-border)] bg-[var(--hw-bg-soft)] px-4 py-6 text-center font-semibold text-[var(--hw-muted)]">
-          {locale === "es" ? "Esta oferta ha finalizado." : "Esta oferta foi encerrada."}
-        </p>
-      ) : (
-        <TimedOffer
-          offers={offers}
-          elapsed={Number.MAX_SAFE_INTEGER}
-          webinarId={webinarId}
-          registrationToken={registrationToken}
-          sessionStartIso={sessionStartIso}
-          previewMode={previewMode}
-          forceVisible
-          stacked
-          language={language}
-        />
-      )}
+      <TimedOffer
+        offers={offers}
+        elapsed={Number.MAX_SAFE_INTEGER}
+        webinarId={webinarId}
+        registrationToken={registrationToken}
+        sessionStartIso={sessionStartIso}
+        previewMode={previewMode}
+        forceVisible
+        stacked
+        language={language}
+      />
     </section>
   );
 }
