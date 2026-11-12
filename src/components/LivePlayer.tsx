@@ -1216,7 +1216,7 @@ export function LivePlayer({
               sidePanelTab === "offer"
                 ? "bg-[var(--hw-red)] text-white"
                 : visibleOffer
-                  ? "text-[var(--hw-muted)] hover:text-[var(--hw-text)]"
+                  ? "text-[var(--hw-red)] motion-safe:animate-pulse hover:text-[var(--hw-red)]"
                   : "cursor-not-allowed text-[var(--hw-muted)] opacity-60"
             }`}
           >
